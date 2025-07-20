@@ -1,0 +1,30 @@
+// tsconfig.json
+{
+    "compilerOptions": {
+      "target": "es5", // Questo può rimanere es5 o essere aggiornato a una versione più recente se desideri, non è la causa dell'errore 'includes'
+      "lib": ["dom", "dom.iterable", "es2017"], // <--- MODIFICATO/CONTROLLATO: Assicurati che "es2017" o "esnext" sia presente qui
+      "allowJs": true,
+      "skipLibCheck": true,
+      "esModuleInterop": true,
+      "allowSyntheticDefaultImports": true,
+      "strict": true,
+      "forceConsistentCasingInFileNames": true,
+      "noEmit": true,
+      "jsx": "react-jsx",
+      "module": "esnext",
+      "moduleResolution": "node",
+      "resolveJsonModule": true,
+      "isolatedModules": true,
+      "incremental": true,
+      "baseUrl": "./src", // Assicurati che il tuo progetto abbia una cartella src/
+      "paths": {
+        "*": ["*", "../node_modules/*"]
+      }
+    },
+    "include": [
+      "src" // Questo dice a TypeScript di compilare i file dentro la cartella src/
+    ],
+    "exclude": [
+      "node_modules" // Questo esclude la cartella node_modules dalla compilazione
+    ]
+  }
