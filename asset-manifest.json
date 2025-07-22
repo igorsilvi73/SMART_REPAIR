@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/SMART_REPAIR/static/css/main.0fcab471.css",
+    "main.js": "/SMART_REPAIR/static/js/main.f2522174.js",
+    "index.html": "/SMART_REPAIR/index.html",
+    "main.0fcab471.css.map": "/SMART_REPAIR/static/css/main.0fcab471.css.map",
+    "main.f2522174.js.map": "/SMART_REPAIR/static/js/main.f2522174.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.0fcab471.css",
+    "static/js/main.f2522174.js"
+  ]
+}
