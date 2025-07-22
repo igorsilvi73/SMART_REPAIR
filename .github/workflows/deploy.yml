@@ -16,7 +16,7 @@ jobs:
       - name: Set up Node.js # Configura Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "18" # Usa Node.js versione 18 (o quella compatibile con il tuo progetto)
+          node-version: "20" # O '20.x' # Usa Node.js versione 18 (o quella compatibile con il tuo progetto)
 
       - name: Install dependencies # Installa le dipendenze del progetto
         run: yarn install # O 'npm install' se usi npm
