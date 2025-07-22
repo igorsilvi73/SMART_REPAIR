@@ -288,26 +288,28 @@ const GanttCarManiaApp: React.FC = () => {
         });
         // FINE LOGICA DI ORDINAMENTO
 
-        let operatoreAssegnato = "";
-        let finalInizioTask: Date;
-        let finalEndTask: Date;
+        // Inizializza finalInizioTask, finalEndTask e operatoreAssegnato
+        // con valori di default robusti per soddisfare TypeScript.
+        // Se candidati è vuoto, usa un fallback 'N/A' per l'operatore.
+        let operatoreAssegnato: string =
+          candidati.length > 0 ? candidati[0] : "N/A";
+        let finalInizioTask: Date = new Date(); // Inizializzato (fix TS2454)
+        let finalEndTask: Date = new Date(); // Inizializzato (fix TS2454)
 
-        // Fase 1: Cerca un operatore disponibile nell'orario di partenza corrente (currentTaskStartTime)
+        // Fase 1: Cerca un operatore disponibile nell'orario di partenza corrente (proposedInizioTask)
+        // Utilizza le variabili `proposedInizioTask` e `proposedEndTask` per le verifiche temporanee.
         const proposedInizioTask = new Date(currentTaskStartTime);
         const proposedEndTask = new Date(
           proposedInizioTask.getTime() + durataMs
         );
 
+        let foundAvailableAtProposedTime = false; // Flag cruciale per TS2454
+
         for (let op of candidati) {
           const isAvailableAtProposedTime = !(nuoveOccupazioni[op] || []).some(
             (dataOccupata) => {
-              // NOTA: Il calcolo di `occupiedEnd` qui è semplificato.
-              // `dataOccupata` è solo la data di inizio del task occupato.
-              // Per un controllo preciso, `occupazioneOperatori` dovrebbe memorizzare intervalli [start, end]
-              // o l'estimatedMs di ogni task occupato.
               const estimatedDurationOfOccupiedTask =
-                durataLavorazioni[lav] || 0; // Fallback se non si riesce a ottenere la durata del task occupato
-              // Questo è un punto di debolezza della logica di scheduling attuale, come discusso
+                durataLavorazioni[lav] || 0;
               const occupiedEnd = new Date(
                 dataOccupata.getTime() +
                   estimatedDurationOfOccupiedTask * 3600 * 1000
@@ -328,28 +330,23 @@ const GanttCarManiaApp: React.FC = () => {
             operatoreAssegnato = op;
             finalInizioTask = proposedInizioTask;
             finalEndTask = proposedEndTask;
+            foundAvailableAtProposedTime = true;
             break;
           }
         }
 
-        // Fase 2: Se nessun operatore è disponibile nell'orario proposto, assegna al più esperto e trova il prossimo slot libero
-        if (!operatoreAssegnato) {
-          const primoOpOrdinato = candidati[0];
-          operatoreAssegnato = primoOpOrdinato;
-
-          // `trovaSlotLibero` usa `occupazioneOperatori` che al momento ha solo Date.
-          // La logica di sovrapposizione in `trovaSlotLibero` è anch'essa semplificata.
+        // Fase 2: Se nessun operatore è disponibile nell'orario proposto (il flag è false),
+        // assegna al più esperto (già `candidati[0]`) e trova il prossimo slot libero.
+        if (!foundAvailableAtProposedTime) {
           finalInizioTask = trovaSlotLibero(
             currentTaskStartTime,
             durataOre,
-            primoOpOrdinato
+            operatoreAssegnato
           );
           finalEndTask = new Date(finalInizioTask.getTime() + durataMs);
         }
 
         // AGGIORNAMENTO dell'occupazione dell'operatore assegnato
-        // NOTA: Anche qui, si aggiunge solo la data di inizio. Per una pianificazione robusta,
-        // sarebbe meglio aggiungere l'intervallo [inizio, fine] al tracking dell'occupazione.
         nuoveOccupazioni[operatoreAssegnato] = [
           ...(nuoveOccupazioni[operatoreAssegnato] || []),
           finalInizioTask,
@@ -431,7 +428,7 @@ const GanttCarManiaApp: React.FC = () => {
     setOccupazioneOperatori(nuoveOccupazioni);
 
     setModello("");
-    setLavorazioniSelezionate([]); // <--- CORRETTO: Chiamata alla funzione setter
+    setLavorazioniSelezionate([]);
     setPriorita("1");
   };
 
@@ -449,42 +446,24 @@ const GanttCarManiaApp: React.FC = () => {
         handleClickAuto(task.id);
       }
     }
-  };
-
+  }; // <--- Chiusura corretta della funzione handleBarClick
   return (
     <div style={{ padding: 30 }}>
+      {/* ... TUTTO IL CONTENUTO VISIVO (il form Aggiungi Auto, la tabella esperienza, il Gantt) ... */}
       <h2>📅 Car Mania – Gantt Produzione</h2>
-      <div
-        style={{
-          marginBottom: 20,
-          border: "1px solid #ddd",
-          padding: "15px",
-          borderRadius: "8px",
-          backgroundColor: "#f9f9f9",
-        }}
-      >
+      <div style={{ marginBottom: 20, border: '1px solid #ddd', padding: '15px', borderRadius: '8px', backgroundColor: '#f9f9f9' }}>
         <h3>Aggiungi Nuova Auto per Lavorazione</h3>
         <input
           type="text"
           placeholder="Modello auto (es. Fiat Punto)"
           value={modello}
           onChange={(e) => setModello(e.target.value)}
-          style={{
-            marginRight: 10,
-            padding: "8px",
-            borderRadius: "4px",
-            border: "1px solid #ccc",
-          }}
+          style={{ marginRight: 10, padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
         />
         <select
           value={priorita}
           onChange={(e) => setPriorita(e.target.value)}
-          style={{
-            marginRight: 10,
-            padding: "8px",
-            borderRadius: "4px",
-            border: "1px solid #ccc",
-          }}
+          style={{ marginRight: 10, padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
         >
           <option value="1">Priorità 1 (alta)</option>
           <option value="2">Priorità 2</option>
@@ -495,19 +474,12 @@ const GanttCarManiaApp: React.FC = () => {
         <div style={{ marginBottom: 10, marginTop: 10 }}>
           <h4>Seleziona Lavorazioni:</h4>
           {lavorazioniOrdinate.map((lav) => (
-            <label
-              key={lav}
-              style={{
-                marginRight: 15,
-                display: "inline-block",
-                marginBottom: "5px",
-              }}
-            >
+            <label key={lav} style={{ marginRight: 15, display: 'inline-block', marginBottom: '5px' }}>
               <input
                 type="checkbox"
                 checked={lavorazioniSelezionate.includes(lav)}
                 onChange={() => handleCheckboxChange(lav)}
-                style={{ marginRight: "5px" }}
+                style={{ marginRight: '5px' }}
               />
               {" " + lav}
             </label>
@@ -515,41 +487,34 @@ const GanttCarManiaApp: React.FC = () => {
         </div>
         <button
           onClick={handleAddAuto}
-          style={{
-            backgroundColor: "#007bff",
-            color: "white",
-            border: "none",
-            padding: "10px 20px",
-            borderRadius: "5px",
-            cursor: "pointer",
-            fontSize: "16px",
-          }}
+          style={{ backgroundColor: '#007bff', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontSize: '16px' }}
         >
           ➕ Aggiungi auto
         </button>
       </div>
-
       {/* INTEGRAZIONE DEL NUOVO COMPONENTE PER LA GESTIONE ESPERIENZA */}
       <EsperienzaOperatoriTable />
-
+      {/* Questa è la sezione finale del JSX, che include il Gantt o il messaggio */}
+      {/* Cerca questo blocco nel tuo file */}
       {tasks.length > 0 ? (
         <Gantt
-          tasks={tasks.filter((t) => t.start && t.end)} // Filtra task con date valide
-          viewMode={ViewMode.Day} // Visualizzazione per giorno
-          listCellWidth="220px" // Larghezza della lista a sinistra
+          tasks={tasks.filter((t) => t.start && t.end)}
+          viewMode={ViewMode.Day}
+          listCellWidth="220px"
           onClick={handleBarClick}
-          TooltipContent={TooltipContent} // Componente tooltip personalizzato
-          // Proprietà aggiuntive per personalizzazione grafica (opzionale)
+          TooltipContent={TooltipContent}
           barCornerRadius={3}
           barFill={70}
-          fontSize="12px" // <--- CORRETTO: Passa una stringa CSS valida
+          fontSize="12px"
           columnWidth={60}
         />
       ) : (
         <p>🔧 Nessuna auto in lavorazione. Aggiungine una per iniziare!</p>
       )}
-    </div>
-  );
-};
+    </div> // <--- QUESTA RIGA DEVE ESSERE QUI PER CHIUDERE IL DIV INIZIALE
+  ); // <--- QUESTA RIGA DEVE ESSERE QUI PER CHIUDERE IL RETURN JSX
+}; // <--- QUESTA RIGA DEVE ESSERE QUI PER CHIUDERE LA FUNZIONE GanttCarManiaApp (e non da nessuna altra parte prima!)
 
-export default GanttCarManiaApp;
+export default GanttCarManiaApp; // <--- QUESTA DEVE ESSERE L'ULTIMISSIMA RIGA DEL FILE
+
+// END_OF_GANTT_CAR_MANIA_APP_FILE_VERIFIED_BY_GIORGIA_V2

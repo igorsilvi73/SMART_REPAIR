@@ -7,6 +7,7 @@
     "react",
     "starter"
   ],
+  "homepage": "https://igorsilvi73.github.io/SMART_REPAIR/",
   "main": "src/index.tsx",
   "dependencies": {
     "loader-utils": "3.2.1",
