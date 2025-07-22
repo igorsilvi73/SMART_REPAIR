@@ -8,7 +8,8 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest # Esegui il job su una macchina virtuale Ubuntu
-
+    permissions:
+      contents: write # <-- AGGIUNGI QUESTE DUE RIGHE (fai attenzione all'indentazione!)
     steps:
       - name: Checkout repository # Scarica il codice del tuo repository
         uses: actions/checkout@v3
