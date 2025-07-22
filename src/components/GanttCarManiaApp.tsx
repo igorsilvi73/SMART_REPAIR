@@ -451,19 +451,37 @@ const GanttCarManiaApp: React.FC = () => {
     <div style={{ padding: 30 }}>
       {/* ... TUTTO IL CONTENUTO VISIVO (il form Aggiungi Auto, la tabella esperienza, il Gantt) ... */}
       <h2>📅 Car Mania – Gantt Produzione</h2>
-      <div style={{ marginBottom: 20, border: '1px solid #ddd', padding: '15px', borderRadius: '8px', backgroundColor: '#f9f9f9' }}>
+      <div
+        style={{
+          marginBottom: 20,
+          border: "1px solid #ddd",
+          padding: "15px",
+          borderRadius: "8px",
+          backgroundColor: "#f9f9f9",
+        }}
+      >
         <h3>Aggiungi Nuova Auto per Lavorazione</h3>
         <input
           type="text"
           placeholder="Modello auto (es. Fiat Punto)"
           value={modello}
           onChange={(e) => setModello(e.target.value)}
-          style={{ marginRight: 10, padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+          style={{
+            marginRight: 10,
+            padding: "8px",
+            borderRadius: "4px",
+            border: "1px solid #ccc",
+          }}
         />
         <select
           value={priorita}
           onChange={(e) => setPriorita(e.target.value)}
-          style={{ marginRight: 10, padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+          style={{
+            marginRight: 10,
+            padding: "8px",
+            borderRadius: "4px",
+            border: "1px solid #ccc",
+          }}
         >
           <option value="1">Priorità 1 (alta)</option>
           <option value="2">Priorità 2</option>
@@ -474,12 +492,19 @@ const GanttCarManiaApp: React.FC = () => {
         <div style={{ marginBottom: 10, marginTop: 10 }}>
           <h4>Seleziona Lavorazioni:</h4>
           {lavorazioniOrdinate.map((lav) => (
-            <label key={lav} style={{ marginRight: 15, display: 'inline-block', marginBottom: '5px' }}>
+            <label
+              key={lav}
+              style={{
+                marginRight: 15,
+                display: "inline-block",
+                marginBottom: "5px",
+              }}
+            >
               <input
                 type="checkbox"
                 checked={lavorazioniSelezionate.includes(lav)}
                 onChange={() => handleCheckboxChange(lav)}
-                style={{ marginRight: '5px' }}
+                style={{ marginRight: "5px" }}
               />
               {" " + lav}
             </label>
@@ -487,7 +512,15 @@ const GanttCarManiaApp: React.FC = () => {
         </div>
         <button
           onClick={handleAddAuto}
-          style={{ backgroundColor: '#007bff', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontSize: '16px' }}
+          style={{
+            backgroundColor: "#007bff",
+            color: "white",
+            border: "none",
+            padding: "10px 20px",
+            borderRadius: "5px",
+            cursor: "pointer",
+            fontSize: "16px",
+          }}
         >
           ➕ Aggiungi auto
         </button>
