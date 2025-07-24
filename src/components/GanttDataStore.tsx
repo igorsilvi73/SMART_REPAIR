@@ -1,229 +1,211 @@
-// GanttDataStore.tsx
-import React, { createContext, useContext, useEffect, useState } from "react";
-// Importa le costanti dal nuovo file
-// PERCORSO CORRETTO: "../constants" per salire di una cartella da components/
+// src/components/GanttDataStore.tsx
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
+// constants.ts è in src/, quindi il percorso è ../constants
 import {
   lavorazioniOrdinate,
-  getAllOperators,
+  getAllOperators, // <-- CORRETTO: Importa la funzione
   DEFAULT_ESPERIENZA_BASE,
-  MIN_ESPERIENZA,
-  MAX_ESPERIENZA,
 } from "../constants"; 
 
-export interface Lavorazione {
-  id: string;
-  autoId: string;
-  autoNome: string;
-  tipo: string;
-  operatore: string;
-  stato: "attesa" | "in_corso" | "pausa" | "completata";
-  startTime: Date | null;
-  pauseTime: Date | null; // Tempo in cui è stata messa in pausa
-  elapsedMs: number; // Tempo totale effettivo lavorato in millisecondi
-  estimatedMs: number; // Tempo stimato per la lavorazione in millisecondi
-}
-
-// Nuova interfaccia per la struttura dell'esperienza
-export type EsperienzaOperatoriPerTipo = {
+// Definizione del tipo per lo stato di esperienza (Operatore -> Tipo Lavorazione -> Esperienza)
+type EsperienzaOperatoriPerTipo = {
   [operatore: string]: {
-    [tipoLavorazione: string]: number; // Il valore di esperienza (0-100)
+    [tipoLavorazione: string]: number;
   };
 };
 
+// Interfaccia per i dati della singola lavorazione
+export interface Lavorazione {
+  id: string;
+  autoId: string; // ID unico per l'auto, per raggruppare le lavorazioni
+  autoNome: string; // Es. "Fiat Punto"
+  tipo: string; // Es. "Verniciatura"
+  operatore: string; // Operatore assegnato
+  startTime: Date | null; // Quando la lavorazione è stata avviata o ripresa
+  pauseTime: Date | null; // Quando la lavorazione è stata messa in pausa
+  elapsedMs: number; // Tempo totale lavorato in millisecondi
+  stato: "attesa" | "in_corso" | "pausa" | "completata";
+  estimatedMs: number; // Tempo stimato in millisecondi per la lavorazione
+  completionTime?: Date; // Tempo esatto di completamento della lavorazione
+}
+
+// Interfaccia per il contesto delle lavorazioni
 interface LavorazioniContextType {
   lavorazioni: Lavorazione[];
   setLavorazioni: React.Dispatch<React.SetStateAction<Lavorazione[]>>;
-  aggiornaLavorazione: (id: string, azione: "start" | "pause" | "end") => void;
-  // Nuovo stato e funzione per l'esperienza degli operatori
-  esperienzaOperatoriPerTipo: EsperienzaOperatoriPerTipo;
-  // Funzione per il supervisore per impostare manualmente l'esperienza
-  setEsperienzaOperatoreTipoManuale: (
-    operatore: string,
-    tipo: string,
-    valore: number
+  aggiornaLavorazione: (
+    id: string,
+    azione: "start" | "pause" | "end"
   ) => void;
+  // Aggiungiamo anche lo stato dell'esperienza e la funzione per aggiornarlo dal contesto
+  esperienzaOperatoriPerTipo: EsperienzaOperatoriPerTipo;
+  setEsperienzaOperatoriPerTipo: React.Dispatch<
+    React.SetStateAction<EsperienzaOperatoriPerTipo>
+  >;
 }
 
+// Creazione del contesto
 const LavorazioniContext = createContext<LavorazioniContextType | undefined>(
   undefined
 );
 
+// Provider per le lavorazioni e l'esperienza
 export const LavorazioniProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [lavorazioni, setLavorazioni] = useState<Lavorazione[]>(() => {
-    // Carica le lavorazioni da localStorage all'avvio
-    const salvate = localStorage.getItem("lavorazioni");
-    if (salvate) {
-      const parsed = JSON.parse(salvate);
-      return parsed.map((lav: any) => ({
+    // Carica da localStorage all'avvio
+    const savedLavorazioni = localStorage.getItem("lavorazioni");
+    if (savedLavorazioni) {
+      // Ricostruisci gli oggetti Date
+      const parsed = JSON.parse(savedLavorazioni) as Lavorazione[];
+      return parsed.map((lav) => ({
         ...lav,
-        // Converte le stringhe di data in oggetti Date
         startTime: lav.startTime ? new Date(lav.startTime) : null,
         pauseTime: lav.pauseTime ? new Date(lav.pauseTime) : null,
+        completionTime: lav.completionTime ? new Date(lav.completionTime) : undefined,
       }));
     }
-    return []; // Se non ci sono dati salvati, restituisce un array vuoto
+    return [];
   });
 
-  const [
-    esperienzaOperatoriPerTipo,
-    setEsperienzaOperatoriPerTipo,
-  ] = useState<EsperienzaOperatoriPerTipo>(() => {
-    // Carica l'esperienza da localStorage all'avvio
-    const salvataEsperienza = localStorage.getItem("esperienzaOperatoriPerTipo");
-    if (salvataEsperienza) {
-      return JSON.parse(salvataEsperienza);
+  const [esperienzaOperatoriPerTipo, setEsperienzaOperatoriPerTipo] = useState<
+    EsperienzaOperatoriPerTipo
+  >(() => {
+    const savedEsperienza = localStorage.getItem("esperienzaOperatoriPerTipo");
+    if (savedEsperienza) {
+      return JSON.parse(savedEsperienza);
     }
-    // Se non ci sono dati di esperienza salvati, inizializza con il valore di base (50)
+    // Inizializza l'esperienza di base per tutti gli operatori e tipi di lavorazione
     const initialEsperienza: EsperienzaOperatoriPerTipo = {};
-    const allOperators = getAllOperators(); // Ottieni tutti gli operatori definiti
-    
-    // Inizializza ogni combinazione Operatore-TipoLavorazione con DEFAULT_ESPERIENZA_BASE
-    lavorazioniOrdinate.forEach((tipo) => {
-      allOperators.forEach((operatore) => {
-        if (!initialEsperienza[operatore]) {
-          initialEsperienza[operatore] = {};
-        }
-        initialEsperienza[operatore][tipo] = DEFAULT_ESPERIENZA_BASE;
+    getAllOperators().forEach((op) => { // <-- CORRETTO: Chiama la funzione
+      initialEsperienza[op] = {};
+      lavorazioniOrdinate.forEach((tipo) => {
+        initialEsperienza[op][tipo] = DEFAULT_ESPERIENZA_BASE;
       });
     });
     return initialEsperienza;
   });
 
-  // Salva entrambi gli stati (lavorazioni ed esperienza) in localStorage ogni volta che cambiano
+  // Salva in localStorage ogni volta che le lavorazioni o l'esperienza cambiano
   useEffect(() => {
     localStorage.setItem("lavorazioni", JSON.stringify(lavorazioni));
+  }, [lavorazioni]);
+
+  useEffect(() => {
     localStorage.setItem(
       "esperienzaOperatoriPerTipo",
       JSON.stringify(esperienzaOperatoriPerTipo)
     );
-  }, [lavorazioni, esperienzaOperatoriPerTipo]);
+  }, [esperienzaOperatoriPerTipo]);
 
-  // Funzione helper per ottenere l'esperienza attuale di un operatore per un tipo di lavorazione
-  // Ritorna il valore salvato o il DEFAULT_ESPERIENZA_BASE (50) se non esiste ancora
-  const getEsperienza = (operatore: string, tipo: string): number => {
-    return (
-      esperienzaOperatoriPerTipo[operatore]?.[tipo] ?? DEFAULT_ESPERIENZA_BASE
-    );
-  };
+  const aggiornaLavorazione = useCallback(
+    (id: string, azione: "start" | "pause" | "end") => {
+      setLavorazioni((prevLavorazioni) =>
+        prevLavorazioni.map((lav) => {
+          if (lav.id === id) {
+            let newElapsedMs = lav.elapsedMs;
+            const now = new Date();
 
-  // Funzione interna per aggiornare l'esperienza
-  const updateEsperienza = (
-    operatore: string,
-    tipo: string,
-    delta: number // delta è l'incremento/decremento da applicare
-  ) => {
-    setEsperienzaOperatoriPerTipo((prevEsperienza) => {
-      const currentEsperienza = getEsperienza(operatore, tipo); // Usa getEsperienza per sicurezza
-      let newEsperienza = currentEsperienza + delta;
+            switch (azione) {
+              case "start":
+                if (lav.stato === "pausa" && lav.pauseTime) {
+                  return { ...lav, stato: "in_corso", startTime: now, pauseTime: null };
+                }
+                return { ...lav, stato: "in_corso", startTime: now, pauseTime: null };
 
-      // Clampa l'esperienza tra MIN_ESPERIENZA (0) e MAX_ESPERIENZA (100)
-      newEsperienza = Math.max(MIN_ESPERIENZA, Math.min(MAX_ESPERIENZA, newEsperienza));
+              case "pause":
+                if (lav.stato === "in_corso" && lav.startTime) {
+                  newElapsedMs += now.getTime() - lav.startTime.getTime();
+                }
+                return {
+                  ...lav,
+                  stato: "pausa",
+                  pauseTime: now,
+                  startTime: null,
+                  elapsedMs: newElapsedMs,
+                };
 
-      return {
-        ...prevEsperienza,
-        [operatore]: {
-          ...(prevEsperienza[operatore] || {}), // Mantiene le altre esperienze dell'operatore
-          [tipo]: newEsperienza,
-        },
-      };
-    });
-  };
+              case "end":
+                if (lav.stato === "in_corso" && lav.startTime) {
+                  newElapsedMs += now.getTime() - lav.startTime.getTime();
+                }
 
-  // Funzione esposta attraverso il Context per il supervisore per impostare manualmente l'esperienza
-  const setEsperienzaOperatoreTipoManuale = (
-    operatore: string,
-    tipo: string,
-    valore: number
-  ) => {
-    // Clampa anche il valore impostato manualmente
-    const clampedValore = Math.max(MIN_ESPERIENZA, Math.min(MAX_ESPERIENZA, valore));
-    setEsperienzaOperatoriPerTipo((prevEsperienza) => ({
-      ...prevEsperienza,
-      [operatore]: {
-        ...(prevEsperienza[operatore] || {}),
-        [tipo]: clampedValore,
-      },
-    }));
-  };
+                const operatore = lav.operatore;
+                const tipoLavorazione = lav.tipo;
+                const estimatedMs = lav.estimatedMs;
+                const actualElapsedMs = newElapsedMs;
 
-  const aggiornaLavorazione = (
-    id: string,
-    azione: "start" | "pause" | "end"
-  ) => {
-    setLavorazioni((prev) =>
-      prev.map((lav) => {
-        if (lav.id !== id) return lav; // Se non è la lavorazione giusta, la restituisce invariata
+                let percentageChange = 0;
+                if (estimatedMs > 0) {
+                  const timeDifference = estimatedMs - actualElapsedMs;
+                  percentageChange = (timeDifference / estimatedMs) * 100;
+                }
 
-        let nuovoStato: Lavorazione["stato"] = lav.stato;
-        let startTime = lav.startTime;
-        let pauseTime = lav.pauseTime;
-        let elapsedMs = lav.elapsedMs;
+                setEsperienzaOperatoriPerTipo((prevEsperienza) => {
+                  const currentEsperienza =
+                    prevEsperienza[operatore]?.[tipoLavorazione] ??
+                    DEFAULT_ESPERIENZA_BASE;
+                  
+                  const maxChange = 20;
+                  let actualExperienceChange = percentageChange * 0.1;
 
-        const now = new Date(); // Cattura l'ora attuale per tutti i calcoli
+                  if (actualExperienceChange > maxChange) actualExperienceChange = maxChange;
+                  if (actualExperienceChange < -maxChange) actualExperienceChange = -maxChange;
 
-        if (azione === "start") {
-          nuovoStato = "in_corso";
-          if (lav.stato === "pausa" || lav.stato === "attesa") {
-            startTime = now;
-            pauseTime = null; // Resetta il tempo di pausa quando la lavorazione riprende
+                  const newEsperienza = Math.max(
+                    0,
+                    Math.min(
+                      200,
+                      currentEsperienza + actualExperienceChange
+                    )
+                  );
+
+                  return {
+                    ...prevEsperienza,
+                    [operatore]: {
+                      ...(prevEsperienza[operatore] || {}),
+                      [tipoLavorazione]: newEsperienza,
+                    },
+                  };
+                });
+
+                return {
+                  ...lav,
+                  stato: "completata",
+                  startTime: null,
+                  pauseTime: null,
+                  elapsedMs: newElapsedMs,
+                  completionTime: now,
+                };
+
+              default:
+                return lav;
+            }
           }
-        } else if (azione === "pause") {
-          nuovoStato = "pausa";
-          if (lav.stato === "in_corso" && lav.startTime) {
-            elapsedMs += now.getTime() - lav.startTime.getTime();
-            pauseTime = now; // Registra il momento della pausa
-            startTime = null; // Resetta startTime quando in pausa
-          }
-        } else if (azione === "end") {
-          nuovoStato = "completata";
-          if (lav.stato === "in_corso" && lav.startTime) {
-            elapsedMs += now.getTime() - lav.startTime.getTime();
-          }
-          startTime = null;
-          pauseTime = null;
+          return lav;
+        })
+      );
+    },
+    []
+  );
 
-          // *** LOGICA DI AGGIORNAMENTO ESPERIENZA ALLA FINE LAVORAZIONE ***
-          const operatore = lav.operatore;
-          const tipoLavorazione = lav.tipo;
-          const tempoStimato = lav.estimatedMs;
-          const tempoImpiegato = elapsedMs;
-
-          if (tempoStimato > 0) { // Evita divisione per zero
-            const scostamentoPercentuale =
-              ((tempoImpiegato - tempoStimato) / tempoStimato) * 100; // Percentuale di scostamento
-
-            // Il delta esperienza è l'opposto dello scostamento:
-            // Se scostamento è positivo (tempo impiegato > stimato), delta è negativo (esperienza diminuisce)
-            // Se scostamento è negativo (tempo impiegato < stimato), delta è positivo (esperienza aumenta)
-            const deltaEsperienza = -scostamentoPercentuale;
-
-            updateEsperienza(operatore, tipoLavorazione, deltaEsperienza);
-          }
-        }
-
-        return {
-          ...lav,
-          stato: nuovoStato,
-          startTime,
-          pauseTime,
-          elapsedMs,
-        };
-      })
-    );
+  const contextValue = {
+    lavorazioni,
+    setLavorazioni,
+    aggiornaLavorazione,
+    esperienzaOperatoriPerTipo,
+    setEsperienzaOperatoriPerTipo,
   };
 
   return (
-    <LavorazioniContext.Provider
-      value={{
-        lavorazioni,
-        setLavorazioni,
-        aggiornaLavorazione,
-        esperienzaOperatoriPerTipo, // Espone il nuovo stato dell'esperienza
-        setEsperienzaOperatoreTipoManuale, // Espone la funzione per il supervisore
-      }}
-    >
+    <LavorazioniContext.Provider value={contextValue}>
       {children}
     </LavorazioniContext.Provider>
   );
@@ -231,11 +213,8 @@ export const LavorazioniProvider: React.FC<{ children: React.ReactNode }> = ({
 
 export const useLavorazioni = () => {
   const context = useContext(LavorazioniContext);
-  if (!context) {
-    // Errore se il hook viene usato al di fuori del Provider
-    throw new Error(
-      "useLavorazioni deve essere usato all'interno di LavorazioniProvider"
-    );
+  if (context === undefined) {
+    throw new Error("useLavorazioni must be used within a LavorazioniProvider");
   }
   return context;
 };

@@ -1,60 +1,61 @@
-// App.tsx
-import React from "react";
-import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
-
+// src/App.tsx
+import React, { useState } from "react";
+// Componenti che si trovano in src/components/
 import GanttCarManiaApp from "./components/GanttCarManiaApp";
 import OperatoreApp from "./components/OperatoreApp";
-import { LavorazioniProvider } from "./components/GanttDataStore";
+import EsperienzaOperatoriTable from "./components/EsperienzaOperatoriTable";
 
-function App() {
-  // Puoi rendere questo dinamico in futuro, magari con un sistema di login
-  // Per ora, lo manteniamo fisso per i test.
-  const operatoreCorrente = "Alessandro";
+// Providers che si trovano in src/components/
+import { LavorazioniProvider } from "./components/GanttDataStore"; // <-- CORRETTO
+import { AutoProvider } from "./components/AutoDataStore";     // <-- CORRETTO
+
+const App: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<"supervisore" | "operatore" | "esperienza">(
+    "supervisore"
+  );
+  const [selectedOperatore, setSelectedOperatore] = useState<string>("Alessandro");
 
   return (
-    <LavorazioniProvider>
-      <Router>
-        <nav
-          style={{
-            padding: 10,
-            marginBottom: 20,
-            backgroundColor: "#f0f0f0",
-            borderBottom: "1px solid #ddd",
-          }}
-        >
-          <Link
-            to="/"
-            style={{
-              marginRight: 15,
-              textDecoration: "none",
-              color: "#333",
-              fontWeight: "bold",
-            }}
-          >
-            Supervisore
-          </Link>
-          <Link
-            to="/operatore"
-            style={{
-              textDecoration: "none",
-              color: "#333",
-              fontWeight: "bold",
-            }}
-          >
-            Operatore ({operatoreCorrente})
-          </Link>
-        </nav>
+    <AutoProvider>
+      <LavorazioniProvider>
+        <div style={{ padding: "10px" }}>
+          <div style={{ marginBottom: "20px" }}>
+            <button
+              onClick={() => setActiveTab("supervisore")}
+              style={{ marginRight: "10px", padding: "10px", cursor: "pointer", backgroundColor: activeTab === "supervisore" ? "#007bff" : "#f0f0f0", color: activeTab === "supervisore" ? "white" : "black", border: "none", borderRadius: "5px" }}
+            >
+              Supervisore
+            </button>
+            <select
+              value={selectedOperatore}
+              onChange={(e) => {
+                setActiveTab("operatore");
+                setSelectedOperatore(e.target.value);
+              }}
+              style={{ marginRight: "10px", padding: "10px", cursor: "pointer", backgroundColor: activeTab === "operatore" ? "#007bff" : "#f0f0f0", color: activeTab === "operatore" ? "white" : "black", border: "none", borderRadius: "5px" }}
+            >
+              <option value="Alessandro">Operatore (Alessandro)</option>
+              <option value="Giulia">Operatore (Giulia)</option>
+              <option value="Luca">Operatore (Luca)</option>
+              <option value="Francesca">Operatore (Francesca)</option>
+            </select>
+            <button
+              onClick={() => setActiveTab("esperienza")}
+              style={{ padding: "10px", cursor: "pointer", backgroundColor: activeTab === "esperienza" ? "#007bff" : "#f0f0f0", color: activeTab === "esperienza" ? "white" : "black", border: "none", borderRadius: "5px" }}
+            >
+              Esperienza Operatori
+            </button>
+          </div>
 
-        <Routes>
-          <Route path="/" element={<GanttCarManiaApp />} />
-          <Route
-            path="/operatore"
-            element={<OperatoreApp operatore={operatoreCorrente} />} // Passa la prop 'operatore'
-          />
-        </Routes>
-      </Router>
-    </LavorazioniProvider>
+          {activeTab === "supervisore" && <GanttCarManiaApp />}
+          {activeTab === "operatore" && (
+            <OperatoreApp operatore={selectedOperatore} />
+          )}
+          {activeTab === "esperienza" && <EsperienzaOperatoriTable />}
+        </div>
+      </LavorazioniProvider>
+    </AutoProvider>
   );
-}
+};
 
 export default App;
