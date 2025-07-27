@@ -9,12 +9,12 @@ import React, {
 // constants.ts è in src/, quindi il percorso è ../constants
 import {
   lavorazioniOrdinate,
-  getAllOperators, // <-- CORRETTO: Importa la funzione
+  getAllOperators,
   DEFAULT_ESPERIENZA_BASE,
 } from "../constants"; 
 
 // Definizione del tipo per lo stato di esperienza (Operatore -> Tipo Lavorazione -> Esperienza)
-type EsperienzaOperatoriPerTipo = {
+export type EsperienzaOperatoriPerTipo = { 
   [operatore: string]: {
     [tipoLavorazione: string]: number;
   };
@@ -23,19 +23,19 @@ type EsperienzaOperatoriPerTipo = {
 // Interfaccia per i dati della singola lavorazione
 export interface Lavorazione {
   id: string;
-  autoId: string; // ID unico per l'auto, per raggruppare le lavorazioni
-  autoNome: string; // Es. "Fiat Punto"
-  tipo: string; // Es. "Verniciatura"
-  operatore: string; // Operatore assegnato
-  startTime: Date | null; // Quando la lavorazione è stata avviata o ripresa
-  pauseTime: Date | null; // Quando la lavorazione è stata messa in pausa
-  elapsedMs: number; // Tempo totale lavorato in millisecondi
+  autoId: string; 
+  autoNome: string; 
+  tipo: string; 
+  operatore: string; 
+  startTime: Date | null; 
+  pauseTime: Date | null; 
+  elapsedMs: number; 
   stato: "attesa" | "in_corso" | "pausa" | "completata";
-  estimatedMs: number; // Tempo stimato in millisecondi per la lavorazione
-  completionTime?: Date; // Tempo esatto di completamento della lavorazione
+  estimatedMs: number; 
+  completionTime?: Date; 
+  prerequisiteLavorazioneId?: string; 
 }
 
-// Interfaccia per il contesto delle lavorazioni
 interface LavorazioniContextType {
   lavorazioni: Lavorazione[];
   setLavorazioni: React.Dispatch<React.SetStateAction<Lavorazione[]>>;
@@ -43,27 +43,30 @@ interface LavorazioniContextType {
     id: string,
     azione: "start" | "pause" | "end"
   ) => void;
-  // Aggiungiamo anche lo stato dell'esperienza e la funzione per aggiornarlo dal contesto
   esperienzaOperatoriPerTipo: EsperienzaOperatoriPerTipo;
   setEsperienzaOperatoriPerTipo: React.Dispatch<
     React.SetStateAction<EsperienzaOperatoriPerTipo>
   >;
+  getLavorazioneById: (id: string) => Lavorazione | undefined; 
+  triggerReschedule?: () => void; // Aggiunto questa funzione opzionale al contesto
 }
 
-// Creazione del contesto
 const LavorazioniContext = createContext<LavorazioniContextType | undefined>(
   undefined
 );
 
-// Provider per le lavorazioni e l'esperienza
-export const LavorazioniProvider: React.FC<{ children: React.ReactNode }> = ({
+interface LavorazioniProviderProps { 
+  children: React.ReactNode;
+  triggerRescheduleFromApp: () => void; 
+}
+
+export const LavorazioniProvider: React.FC<LavorazioniProviderProps> = ({ 
   children,
+  triggerRescheduleFromApp 
 }) => {
   const [lavorazioni, setLavorazioni] = useState<Lavorazione[]>(() => {
-    // Carica da localStorage all'avvio
     const savedLavorazioni = localStorage.getItem("lavorazioni");
     if (savedLavorazioni) {
-      // Ricostruisci gli oggetti Date
       const parsed = JSON.parse(savedLavorazioni) as Lavorazione[];
       return parsed.map((lav) => ({
         ...lav,
@@ -82,9 +85,8 @@ export const LavorazioniProvider: React.FC<{ children: React.ReactNode }> = ({
     if (savedEsperienza) {
       return JSON.parse(savedEsperienza);
     }
-    // Inizializza l'esperienza di base per tutti gli operatori e tipi di lavorazione
     const initialEsperienza: EsperienzaOperatoriPerTipo = {};
-    getAllOperators().forEach((op) => { // <-- CORRETTO: Chiama la funzione
+    getAllOperators().forEach((op) => {
       initialEsperienza[op] = {};
       lavorazioniOrdinate.forEach((tipo) => {
         initialEsperienza[op][tipo] = DEFAULT_ESPERIENZA_BASE;
@@ -93,7 +95,6 @@ export const LavorazioniProvider: React.FC<{ children: React.ReactNode }> = ({
     return initialEsperienza;
   });
 
-  // Salva in localStorage ogni volta che le lavorazioni o l'esperienza cambiano
   useEffect(() => {
     localStorage.setItem("lavorazioni", JSON.stringify(lavorazioni));
   }, [lavorazioni]);
@@ -107,18 +108,18 @@ export const LavorazioniProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const aggiornaLavorazione = useCallback(
     (id: string, azione: "start" | "pause" | "end") => {
-      setLavorazioni((prevLavorazioni) =>
-        prevLavorazioni.map((lav) => {
+      setLavorazioni((prevLavorazioni) => {
+        const updatedLavorazioni = prevLavorazioni.map((lav) => {
           if (lav.id === id) {
             let newElapsedMs = lav.elapsedMs;
             const now = new Date();
 
             switch (azione) {
               case "start":
-                if (lav.stato === "pausa" && lav.pauseTime) {
-                  return { ...lav, stato: "in_corso", startTime: now, pauseTime: null };
+                if (lav.stato === "pausa") { 
+                  return { ...lav, stato: "in_corso", startTime: now, pauseTime: null } as Lavorazione; // CAST
                 }
-                return { ...lav, stato: "in_corso", startTime: now, pauseTime: null };
+                return { ...lav, stato: "in_corso", startTime: now, pauseTime: null } as Lavorazione; // CAST
 
               case "pause":
                 if (lav.stato === "in_corso" && lav.startTime) {
@@ -128,9 +129,8 @@ export const LavorazioniProvider: React.FC<{ children: React.ReactNode }> = ({
                   ...lav,
                   stato: "pausa",
                   pauseTime: now,
-                  startTime: null,
                   elapsedMs: newElapsedMs,
-                };
+                } as Lavorazione; // CAST
 
               case "end":
                 if (lav.stato === "in_corso" && lav.startTime) {
@@ -176,24 +176,39 @@ export const LavorazioniProvider: React.FC<{ children: React.ReactNode }> = ({
                   };
                 });
 
-                return {
+                const finalTaskState = {
                   ...lav,
                   stato: "completata",
-                  startTime: null,
                   pauseTime: null,
                   elapsedMs: newElapsedMs,
                   completionTime: now,
-                };
+                } as Lavorazione; // CAST
+
+                // Trigger della ripianificazione dopo un breve timeout
+                if (azione === "end" && triggerRescheduleFromApp) { 
+                  setTimeout(() => triggerRescheduleFromApp(), 0); 
+                }
+
+                return finalTaskState;
 
               default:
                 return lav;
             }
           }
           return lav;
-        })
-      );
+        }); 
+
+        return updatedLavorazioni;
+      });
     },
-    []
+    [triggerRescheduleFromApp] 
+  );
+
+  const getLavorazioneById = useCallback(
+    (id: string) => {
+      return lavorazioni.find((lav) => lav.id === id);
+    },
+    [lavorazioni]
   );
 
   const contextValue = {
@@ -202,6 +217,7 @@ export const LavorazioniProvider: React.FC<{ children: React.ReactNode }> = ({
     aggiornaLavorazione,
     esperienzaOperatoriPerTipo,
     setEsperienzaOperatoriPerTipo,
+    getLavorazioneById,
   };
 
   return (

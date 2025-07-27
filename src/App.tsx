@@ -1,13 +1,13 @@
 // src/App.tsx
 import React, { useState } from "react";
-// Componenti che si trovano in src/components/
 import GanttCarManiaApp from "./components/GanttCarManiaApp";
 import OperatoreApp from "./components/OperatoreApp";
 import EsperienzaOperatoriTable from "./components/EsperienzaOperatoriTable";
 
-// Providers che si trovano in src/components/
-import { LavorazioniProvider } from "./components/GanttDataStore"; // <-- CORRETTO
-import { AutoProvider } from "./components/AutoDataStore";     // <-- CORRETTO
+import { LavorazioniProvider } from "./components/GanttDataStore"; 
+import { AutoProvider } from "./components/AutoDataStore"; 
+
+import { getAllOperators } from "./constants"; 
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"supervisore" | "operatore" | "esperienza">(
@@ -15,9 +15,16 @@ const App: React.FC = () => {
   );
   const [selectedOperatore, setSelectedOperatore] = useState<string>("Alessandro");
 
+  const allOperators = getAllOperators();
+
+  // Questa funzione verrà definita e passata da GanttCarManiaApp.tsx
+  // Per ora è una funzione vuota di placeholder per evitare errori di Typescript.
+  // Verrà sovrascritta dalla funzione reale da GanttCarManiaApp.
+  const [rescheduleTrigger, setRescheduleTrigger] = useState<() => void>(() => () => {});
+
   return (
     <AutoProvider>
-      <LavorazioniProvider>
+      <LavorazioniProvider triggerRescheduleFromApp={rescheduleTrigger}> 
         <div style={{ padding: "10px" }}>
           <div style={{ marginBottom: "20px" }}>
             <button
@@ -34,10 +41,11 @@ const App: React.FC = () => {
               }}
               style={{ marginRight: "10px", padding: "10px", cursor: "pointer", backgroundColor: activeTab === "operatore" ? "#007bff" : "#f0f0f0", color: activeTab === "operatore" ? "white" : "black", border: "none", borderRadius: "5px" }}
             >
-              <option value="Alessandro">Operatore (Alessandro)</option>
-              <option value="Giulia">Operatore (Giulia)</option>
-              <option value="Luca">Operatore (Luca)</option>
-              <option value="Francesca">Operatore (Francesca)</option>
+              {allOperators.map(operator => (
+                <option key={operator} value={operator}>
+                  Operatore ({operator})
+                </option>
+              ))}
             </select>
             <button
               onClick={() => setActiveTab("esperienza")}
@@ -47,7 +55,7 @@ const App: React.FC = () => {
             </button>
           </div>
 
-          {activeTab === "supervisore" && <GanttCarManiaApp />}
+          {activeTab === "supervisore" && <GanttCarManiaApp setRescheduleTrigger={setRescheduleTrigger} />} 
           {activeTab === "operatore" && (
             <OperatoreApp operatore={selectedOperatore} />
           )}

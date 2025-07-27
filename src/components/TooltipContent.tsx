@@ -1,35 +1,44 @@
-// TooltipContent.tsx
+// src/components/TooltipContent.tsx
 import React from "react";
 import { Task } from "gantt-task-react";
-// Percorso corretto per constants.ts
 import { DEFAULT_ESPERIENZA_BASE } from "../constants";
 
 // Estendi l'interfaccia Task per includere le nostre custom props
-// AGGIUNGI 'duration?: number;' qui
-export interface CustomTask extends Task {
-  // <--- RIGA MODIFICATA
-  duration?: number; // <--- AGGIUNTA QUESTA RIGA PER RISOLVERE L'ERRORE
+interface CustomTask extends Task {
   operatoreAssegnato?: string;
   tipoLavorazione?: string;
   lavorazioneStato?: "attesa" | "in_corso" | "pausa" | "completata";
   tempoLavoratoMs?: number;
   tempoStimatoMs?: number;
-  esperienzaOperatore?: number; // Nuova prop per l'esperienza
+  esperienzaOperatore?: number;
+  targaAuto?: string;
+  coloreAuto?: string;
+  duration?: number;
 }
 
 interface Props {
-  task: CustomTask; // Usa l'interfaccia estesa
+  task: CustomTask;
   fontSize: string;
   fontFamily: string;
 }
 
 const TooltipContent: React.FC<Props> = ({ task }) => {
-  // Funzione per formattare il tempo in ore e minuti
+  // Opzioni per la formattazione della data e ora (24h)
+  const dateTimeOptions: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false, // Formato 24h
+  };
+
+  // Funzione per formattare il tempo in ore e minuti (già presente)
   const formatTimeInHoursAndMinutes = (ms: number | undefined): string => {
     if (ms === undefined || ms === null) return "N/A";
     const totalSeconds = Math.floor(ms / 1000);
     const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const minutes = Math.floor((totalSeconds % 3600) / (1000 * 60)); // Correzione per i minuti
     const seconds = totalSeconds % 60;
     return `${hours}h ${minutes}m ${seconds}s`;
   };
@@ -52,7 +61,8 @@ const TooltipContent: React.FC<Props> = ({ task }) => {
       {task.operatoreAssegnato && (
         <div>Operatore: {task.operatoreAssegnato}</div>
       )}
-      {/* Mostra l'esperienza dell'operatore per quel tipo di lavorazione */}
+      {task.targaAuto && <div>Targa: {task.targaAuto}</div>}
+      {task.coloreAuto && <div>Colore: {task.coloreAuto}</div>}
       {task.operatoreAssegnato && task.tipoLavorazione && (
         <div>
           Esperienza ({task.operatoreAssegnato} su {task.tipoLavorazione}):{" "}
@@ -62,9 +72,17 @@ const TooltipContent: React.FC<Props> = ({ task }) => {
       )}
       <br />
       {task.start && (
-        <div>Data inizio: {task.start.toLocaleDateString("it-IT")}</div>
+        // Modifica qui: da toLocaleDateString a toLocaleString per includere l'ora
+        <div>
+          Data inizio: {task.start.toLocaleString("it-IT", dateTimeOptions)}
+        </div>
       )}
-      {task.end && <div>Data fine: {task.end.toLocaleDateString("it-IT")}</div>}
+      {task.end && (
+        // Modifica qui: da toLocaleDateString a toLocaleString per includere l'ora
+        <div>
+          Data fine: {task.end.toLocaleString("it-IT", dateTimeOptions)}
+        </div>
+      )}
       {task.tempoStimatoMs !== undefined && (
         <div>
           Durata Stimata: {formatTimeInHoursAndMinutes(task.tempoStimatoMs)}

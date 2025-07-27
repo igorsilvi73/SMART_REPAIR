@@ -1,9 +1,9 @@
 // src/components/GanttCarManiaApp.tsx
 // GanttDataStore si trova nella stessa cartella components/
-import { useLavorazioni, Lavorazione } from "./GanttDataStore"; 
+import { useLavorazioni, Lavorazione, EsperienzaOperatoriPerTipo } from "./GanttDataStore"; 
 // AutoDataStore si trova nella stessa cartella components/
 import { useAuto, Auto } from "./AutoDataStore"; 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react"; 
 import "gantt-task-react/dist/index.css";
 import { Gantt, Task, ViewMode } from "gantt-task-react";
 // TooltipContent si trova nella stessa cartella components/
@@ -15,6 +15,7 @@ import {
   coloriLavorazioni,
   espertiPerLavorazione,
   DEFAULT_ESPERIENZA_BASE,
+  getAllOperators 
 } from "../constants"; 
 
 // Definisci una CustomTask per estendere l'interfaccia Task della libreria
@@ -25,18 +26,19 @@ interface CustomTask extends Task {
   tempoLavoratoMs?: number;
   tempoStimatoMs?: number;
   esperienzaOperatore?: number;
-  targaAuto?: string; // Nuova prop per la targa dell'auto nel task Gantt
+  targaAuto?: string;
   coloreAuto?: string;
-  duration?: number; // Nuova prop per il colore dell'auto nel task Gantt
+  duration?: number; // Aggiunto per la compatibilità con il Task
 }
 
-// Funzioni di utilità per il calcolo delle ore lavorative (rimangono invariate)
+// Funzioni di utilità per il calcolo delle ore lavorative
 function isWorkHour(date: Date): boolean {
   const hour = date.getHours();
   const day = date.getDay();
+  // Lunedì (1) a Venerdì (5) e orari 8-12, 14-18
   return (
-    day !== 0 &&
-    day !== 6 &&
+    day !== 0 && // Non è Domenica
+    day !== 6 && // Non è Sabato
     ((hour >= 8 && hour < 12) || (hour >= 14 && hour < 18))
   );
 }
@@ -63,7 +65,205 @@ function getWorkProgress(start: Date, end: Date): number {
   return parseFloat(((elapsedHours / totalHours) * 100).toFixed(1));
 }
 
-const GanttCarManiaApp: React.FC = () => {
+// Funzione: Calcola la data di fine di un task contando solo le ore lavorative.
+function calculateWorkEndDate(startDate: Date, durationMs: number): Date {
+  const endDate = new Date(startDate);
+  let remainingMs = durationMs;
+
+  while (!isWorkHour(endDate)) {
+    endDate.setHours(endDate.getHours() + 1);
+    endDate.setMinutes(0, 0, 0);
+    if (endDate.getDay() === 0 || endDate.getDay() === 6) { 
+        endDate.setDate(endDate.getDate() + (endDate.getDay() === 0 ? 1 : (endDate.getDay() === 6 ? 2 : 0)));
+        endDate.setHours(8, 0, 0, 0);
+    }
+  }
+
+  while (remainingMs > 0) {
+    const currentHour = endDate.getHours();
+    const currentDay = endDate.getDay();
+
+    if (currentDay === 0 || currentDay === 6 || (currentHour >= 12 && currentHour < 14) || currentHour >= 18 || currentHour < 8) {
+      endDate.setHours(endDate.getHours() + 1);
+      endDate.setMinutes(0, 0, 0);
+    } else {
+      remainingMs -= (1000 * 60 * 60);
+      endDate.setHours(endDate.getHours() + 1);
+    }
+  }
+  return endDate;
+}
+
+// FUNZIONE CENTRALE DI SCHEDULING: Ripianifica tutte le lavorazioni non completate
+const recalculateFullSchedule = (
+  allLavorazioni: Lavorazione[], 
+  allAutoList: Auto[],         
+  esperienzaOperatori: EsperienzaOperatoriPerTipo,
+  trovaSlotLiberoFunc: (earliestStart: Date, taskDurationMs: number, operatore: string, existingOccupations: { start: Date; end: Date }[]) => Date 
+): Lavorazione[] => {
+  const newScheduledLavorazioni: Lavorazione[] = [];
+  const currentOccupations: { [key: string]: { start: Date; end: Date }[] } = {};
+  const carLastEndTime: { [autoId: string]: Date } = {}; 
+
+  const completedLavorazioni = allLavorazioni.filter(
+    (lav) => lav.stato === "completata"
+  );
+  const fixedLavorazioni = allLavorazioni.filter(
+    (lav) => lav.stato === "in_corso" || lav.stato === "pausa"
+  );
+  const flexibleLavorazioni = allLavorazioni.filter(
+    (lav) => lav.stato === "attesa"
+  );
+
+  fixedLavorazioni.forEach((lav) => {
+    const estimatedEnd = calculateWorkEndDate(lav.startTime!, lav.estimatedMs);
+    if (!currentOccupations[lav.operatore]) {
+      currentOccupations[lav.operatore] = [];
+    }
+    currentOccupations[lav.operatore].push({ start: lav.startTime!, end: estimatedEnd });
+  });
+  for (const op in currentOccupations) {
+    currentOccupations[op].sort((a, b) => a.start.getTime() - b.start.getTime());
+  }
+
+  interface TaskWithAutoPriority extends Lavorazione {
+    carPriority: string;
+    carAcceptanceDate: Date;
+  }
+
+  const tasksToReschedule: TaskWithAutoPriority[] = flexibleLavorazioni.map(
+    (lav) => {
+      const auto = allAutoList.find((a) => a.id === lav.autoId);
+      return {
+        ...lav,
+        carPriority: auto ? auto.priorita : "5", 
+        carAcceptanceDate: auto ? auto.dataAccettazione : new Date(0), 
+      };
+    }
+  );
+
+  tasksToReschedule.sort((a, b) => {
+    if (a.carPriority !== b.carPriority) {
+      return parseInt(a.carPriority) - parseInt(b.carPriority);
+    }
+    if (a.carAcceptanceDate.getTime() !== b.carAcceptanceDate.getTime()) {
+      return a.carAcceptanceDate.getTime() - b.carAcceptanceDate.getTime();
+    }
+    const orderA = lavorazioniOrdinate.indexOf(a.tipo);
+    const orderB = lavorazioniOrdinate.indexOf(b.tipo);
+    if (orderA !== orderB) {
+      return orderA - orderB;
+    }
+    return a.id.localeCompare(b.id);
+  });
+
+  tasksToReschedule.forEach((lavToReschedule) => {
+    const durataMs = lavToReschedule.estimatedMs;
+    const candidati = espertiPerLavorazione[lavToReschedule.tipo];
+
+    interface CandidateInfo {
+      name: string;
+      experience: number;
+      earliestPossibleStart: Date;
+    }
+
+    const candidateInfos: CandidateInfo[] = [];
+    
+    let taskSearchStartTime: Date;
+
+    const auto = allAutoList.find(a => a.id === lavToReschedule.autoId); 
+    let defaultBaseTime = auto?.dataAccettazione || new Date();
+    while (!isWorkHour(defaultBaseTime)) {
+        defaultBaseTime.setHours(defaultBaseTime.getHours() + 1);
+        defaultBaseTime.setMinutes(0,0,0);
+        if (defaultBaseTime.getDay() === 0 || defaultBaseTime.getDay() === 6) { 
+            defaultBaseTime.setDate(defaultBaseTime.getDate() + (defaultBaseTime.getDay() === 0 ? 1 : (defaultBaseTime.getDay() === 6 ? 2 : 0)));
+            defaultBaseTime.setHours(8, 0, 0, 0);
+        }
+    }
+    taskSearchStartTime = defaultBaseTime;
+
+    if (lavToReschedule.prerequisiteLavorazioneId) {
+        const prerequisite = allLavorazioni.find(l => l.id === lavToReschedule.prerequisiteLavorazioneId);
+        if (prerequisite) {
+            if (prerequisite.stato === "completata" && prerequisite.completionTime) {
+                taskSearchStartTime = new Date(Math.max(taskSearchStartTime.getTime(), prerequisite.completionTime.getTime()));
+            } else if (prerequisite.startTime) {
+                const prereqEstimatedEnd = calculateWorkEndDate(prerequisite.startTime, prerequisite.estimatedMs);
+                taskSearchStartTime = new Date(Math.max(taskSearchStartTime.getTime(), prereqEstimatedEnd.getTime()));
+            }
+        }
+    }
+
+    if (carLastEndTime[lavToReschedule.autoId] && carLastEndTime[lavToReschedule.autoId].getTime() > taskSearchStartTime.getTime()) {
+        taskSearchStartTime = carLastEndTime[lavToReschedule.autoId];
+    }
+    
+    while (!isWorkHour(taskSearchStartTime)) {
+        taskSearchStartTime.setHours(taskSearchStartTime.getHours() + 1);
+        taskSearchStartTime.setMinutes(0,0,0);
+        if (taskSearchStartTime.getDay() === 0 || taskSearchStartTime.getDay() === 6) { 
+            taskSearchStartTime.setDate(taskSearchStartTime.getDate() + (taskSearchStartTime.getDay() === 0 ? 1 : (taskSearchStartTime.getDay() === 6 ? 2 : 0)));
+            taskSearchStartTime.setHours(8, 0, 0, 0);
+        }
+    }
+
+
+    for (const op of candidati) {
+      const experience = esperienzaOperatori[op]?.[lavToReschedule.tipo] ?? DEFAULT_ESPERIENZA_BASE;
+      const earliestStart = trovaSlotLiberoFunc( 
+        taskSearchStartTime, 
+        durataMs,
+        op,
+        currentOccupations[op] || [] 
+      );
+      candidateInfos.push({
+        name: op,
+        experience: experience,
+        earliestPossibleStart: earliestStart,
+      });
+    }
+
+    candidateInfos.sort((a, b) => {
+      if (a.earliestPossibleStart.getTime() !== b.earliestPossibleStart.getTime()) {
+        return a.earliestPossibleStart.getTime() - b.earliestPossibleStart.getTime();
+      }
+      if (a.experience !== b.experience) {
+        return b.experience - a.experience;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    const bestCandidate = candidateInfos[0];
+    const operatoreAssegnato = bestCandidate.name;
+    const inizioTask = bestCandidate.earliestPossibleStart;
+    const endTask = calculateWorkEndDate(inizioTask, durataMs);
+
+    if (!currentOccupations[operatoreAssegnato]) {
+      currentOccupations[operatoreAssegnato] = [];
+    }
+    currentOccupations[operatoreAssegnato].push({ start: inizioTask, end: endTask });
+    currentOccupations[operatoreAssegnato].sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    carLastEndTime[lavToReschedule.autoId] = endTask; 
+
+    const updatedLav: Lavorazione = {
+      ...lavToReschedule,
+      operatore: operatoreAssegnato,
+      startTime: inizioTask,
+    };
+    newScheduledLavorazioni.push(updatedLav);
+  });
+
+  return [...completedLavorazioni, ...fixedLavorazioni, ...newScheduledLavorazioni];
+};
+
+
+interface GanttCarManiaAppProps {
+  setRescheduleTrigger: React.Dispatch<React.SetStateAction<() => void>>; 
+}
+
+const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigger }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const { lavorazioni, setLavorazioni, esperienzaOperatoriPerTipo } = useLavorazioni();
   const { autoList, addAuto, getAutoById, setAutoList } = useAuto(); 
@@ -76,10 +276,9 @@ const GanttCarManiaApp: React.FC = () => {
     string[]
   >([]);
   const [occupazioneOperatori, setOccupazioneOperatori] = useState<
-    { [key: string]: Date[] }
-  >({});
+    { [key: string]: { start: Date; end: Date }[] }
+  >({}); 
 
-  // useEffect per sincronizzare le lavorazioni e le auto dal contesto con i task del Gantt
   useEffect(() => {
     if (lavorazioni.length === 0 && autoList.length === 0) {
       setTasks([]);
@@ -88,8 +287,24 @@ const GanttCarManiaApp: React.FC = () => {
 
     const tasksRicostruiti: CustomTask[] = [];
 
-    autoList.forEach((auto: Auto) => { // Specifica il tipo per 'auto'
-      const lavorazioniAuto = lavorazioni.filter((l: Lavorazione) => l.autoId === auto.id); // Specifica il tipo per 'l'
+    const currentRealOccupations: { [key: string]: { start: Date; end: Date }[] } = {};
+    lavorazioni.forEach(lav => {
+      if (lav.stato !== 'completata' && lav.startTime) {
+        const estimatedEnd = calculateWorkEndDate(lav.startTime, lav.estimatedMs);
+        if (!currentRealOccupations[lav.operatore]) {
+          currentRealOccupations[lav.operatore] = [];
+        }
+        currentRealOccupations[lav.operatore].push({ start: lav.startTime, end: estimatedEnd });
+      }
+    });
+    for (const op in currentRealOccupations) {
+      currentRealOccupations[op].sort((a, b) => a.start.getTime() - b.start.getTime());
+    }
+    setOccupazioneOperatori(currentRealOccupations);
+
+
+    autoList.forEach((auto: Auto) => {
+      const lavorazioniAuto = lavorazioni.filter((l: Lavorazione) => l.autoId === auto.id);
       if (lavorazioniAuto.length === 0) {
         return;
       }
@@ -100,7 +315,7 @@ const GanttCarManiaApp: React.FC = () => {
 
       const startProject = new Date(
         Math.min(
-          ...lavorazioniAuto.map((l: Lavorazione) => // Specifica il tipo per 'l'
+          ...lavorazioniAuto.map((l: Lavorazione) =>
             new Date(l.startTime || auto.dataAccettazione).getTime()
           )
         )
@@ -108,7 +323,7 @@ const GanttCarManiaApp: React.FC = () => {
       const endProject = new Date(
         Math.max(
           ...lavorazioniAuto.map(
-            (l: Lavorazione) => (l.completionTime ? l.completionTime.getTime() : (new Date(l.startTime || auto.dataAccettazione).getTime() + l.estimatedMs))
+            (l: Lavorazione) => (l.completionTime ? l.completionTime.getTime() : calculateWorkEndDate(new Date(l.startTime || auto.dataAccettazione), l.estimatedMs).getTime())
           )
         )
       );
@@ -130,9 +345,9 @@ const GanttCarManiaApp: React.FC = () => {
       };
       tasksRicostruiti.push(padre);
 
-      lavorazioniAuto.forEach((l: Lavorazione) => { // Specifica il tipo per 'l'
+      lavorazioniAuto.forEach((l: Lavorazione) => {
         const s = l.startTime || new Date(); 
-        const e = l.completionTime ? l.completionTime : new Date(s.getTime() + l.estimatedMs);
+        const e = l.completionTime ? l.completionTime : calculateWorkEndDate(s, l.estimatedMs);
 
         let progressPercentage: number;
         if (l.stato === "completata") {
@@ -150,7 +365,7 @@ const GanttCarManiaApp: React.FC = () => {
           project: l.autoId,
           start: s,
           end: e,
-          duration: l.estimatedMs / (1000 * 60 * 60),
+          duration: l.estimatedMs / (1000 * 60 * 60), 
           progress: progressPercentage,
           styles: {
             backgroundColor: coloriLavorazioni[l.tipo] || "#cccccc",
@@ -195,23 +410,46 @@ const GanttCarManiaApp: React.FC = () => {
 
 
   const trovaSlotLibero = (
-    inizio: Date,
-    durata: number,
-    operatore: string
+    earliestStart: Date,
+    taskDurationMs: number,
+    operatore: string,
+    existingOccupations: { start: Date; end: Date }[]
   ): Date => {
-    let slot = new Date(inizio);
-    while (
-      (occupazioneOperatori[operatore] || []).some(
-        (dataOccupata: Date) => 
-          Math.abs(dataOccupata.getTime() - slot.getTime()) < durata * 3600 * 1000
-      )
-    ) {
-      slot.setHours(slot.getHours() + 1);
+    let currentCheckTime = new Date(earliestStart);
+    let potentialEnd = calculateWorkEndDate(currentCheckTime, taskDurationMs); 
+
+    const sortedOccupations = [...existingOccupations].sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    while (true) {
+      let isOverlap = false;
+      for (let i = 0; i < sortedOccupations.length; i++) {
+        const occupied = sortedOccupations[i];
+
+        if (
+          (currentCheckTime.getTime() < occupied.end.getTime() && potentialEnd.getTime() > occupied.start.getTime())
+        ) {
+          isOverlap = true;
+          currentCheckTime = new Date(occupied.end.getTime());
+          currentCheckTime.setMinutes(0,0,0);
+          potentialEnd = calculateWorkEndDate(currentCheckTime, taskDurationMs); 
+          i = -1; 
+          continue; 
+        }
+      }
+
+      if (!isOverlap) {
+        while (!isWorkHour(currentCheckTime)) { 
+          currentCheckTime.setHours(currentCheckTime.getHours() + 1);
+          currentCheckTime.setMinutes(0,0,0);
+          potentialEnd = calculateWorkEndDate(currentCheckTime, taskDurationMs); 
+        }
+        return currentCheckTime;
+      }
     }
-    return slot;
   };
 
-  const handleAddAuto = () => {
+
+  const handleAddAuto = useCallback(() => {
     if (!modello || !targa || !colore || lavorazioniSelezionate.length === 0) {
       alert("Compila tutti i campi auto (Modello, Targa, Colore) e seleziona almeno una lavorazione.");
       return;
@@ -230,99 +468,51 @@ const GanttCarManiaApp: React.FC = () => {
     };
     addAuto(newAuto);
 
-    const oggiAlle8 = new Date();
-    oggiAlle8.setHours(8, 0, 0, 0);
+    setLavorazioni(prevLavorazioni => {
+        const newTasksForThisAuto: Lavorazione[] = [];
+        let lastPrerequisiteId: string | undefined;
 
-    const numeroAutoPresenti = autoList.length;
-    const baseStart = new Date(
-      oggiAlle8.getTime() + numeroAutoPresenti * 4 * 3600 * 1000
-    );
+        lavorazioniOrdinate.forEach((tipoLav: string) => {
+          if (lavorazioniSelezionate.includes(tipoLav)) {
+            const durataMs = durataLavorazioni[tipoLav] * 3600 * 1000;
+            const newTaskId = `task_${Date.now()}_${newTasksForThisAuto.length}`;
+            
+            const newTask: Lavorazione = {
+                id: newTaskId,
+                autoId: newAutoId,
+                autoNome: modello,
+                tipo: tipoLav,
+                operatore: "", 
+                startTime: null,
+                pauseTime: null,
+                elapsedMs: 0,
+                stato: "attesa",
+                estimatedMs: durataMs,
+                prerequisiteLavorazioneId: lastPrerequisiteId, 
+            };
 
-    let currentTaskStartTime = new Date(baseStart);
-    let endUltimoTask = new Date(baseStart);
-
-    const currentOccupazioni: { [key: string]: Date[] } = {};
-    lavorazioni.forEach((lav: Lavorazione) => {
-      if (lav.stato !== 'completata' && lav.startTime) {
-        if (!currentOccupazioni[lav.operatore]) {
-          currentOccupazioni[lav.operatore] = [];
-        }
-        currentOccupazioni[lav.operatore].push(lav.startTime);
-      }
-    });
-    const nuoveOccupazioni: { [key: string]: Date[] } = {
-      ...currentOccupazioni,
-    };
-
-    const tasksToAdd: Lavorazione[] = [];
-
-    lavorazioniOrdinate.forEach((tipoLav: string) => {
-      if (lavorazioniSelezionate.includes(tipoLav)) {
-        const durataOre = durataLavorazioni[tipoLav];
-        const durataMs = durataOre * 3600 * 1000;
-        const candidati = espertiPerLavorazione[tipoLav];
-
-        let operatoreAssegnato = "";
-        let inizioTask = new Date(currentTaskStartTime);
-
-        for (let op of candidati) {
-          const isAvailable = !(nuoveOccupazioni[op] || []).some(
-            (dataOccupata: Date) => {
-              const occupiedEnd = new Date(dataOccupata.getTime() + (durataLavorazioni[tipoLav] || 0) * 3600 * 1000); 
-              const endCurrentTask = new Date(inizioTask.getTime() + durataMs);
-              return (
-                (inizioTask.getTime() >= dataOccupata.getTime() && inizioTask.getTime() < occupiedEnd.getTime()) ||
-                (endCurrentTask.getTime() > dataOccupata.getTime() && endCurrentTask.getTime() <= occupiedEnd.getTime()) ||
-                (dataOccupata.getTime() >= inizioTask.getTime() && dataOccupata.getTime() < endCurrentTask.getTime())
-              );
-            }
-          );
-          if (isAvailable) {
-            operatoreAssegnato = op;
-            break;
+            newTasksForThisAuto.push(newTask);
+            
+            lastPrerequisiteId = newTaskId; 
           }
-        }
-
-        if (!operatoreAssegnato) {
-            const primoOp = candidati[0];
-            inizioTask = trovaSlotLibero(currentTaskStartTime, durataOre, primoOp);
-            operatoreAssegnato = primoOp;
-        }
-
-        const endTask = new Date(inizioTask.getTime() + durataMs);
-
-        nuoveOccupazioni[operatoreAssegnato] = [
-          ...(nuoveOccupazioni[operatoreAssegnato] || []),
-          inizioTask,
-        ];
-        
-        tasksToAdd.push({
-          id: `task_${Date.now()}_${tasksToAdd.length}`,
-          autoId: newAutoId,
-          autoNome: modello,
-          tipo: tipoLav,
-          operatore: operatoreAssegnato,
-          startTime: inizioTask,
-          pauseTime: null,
-          elapsedMs: 0,
-          stato: "attesa",
-          estimatedMs: durataMs,
         });
 
-        currentTaskStartTime.setTime(endTask.getTime());
-        endUltimoTask = endTask;
-      }
-    });
-    
-    setLavorazioni((prev) => [...prev, ...tasksToAdd]);
-    setOccupazioneOperatori(nuoveOccupazioni);
+        const updatedScheduledLavorazioni = recalculateFullSchedule(
+          [...prevLavorazioni, ...newTasksForThisAuto], 
+          [...autoList, newAuto], 
+          esperienzaOperatoriPerTipo,
+          trovaSlotLibero 
+        );
+
+        return updatedScheduledLavorazioni;
+    }); 
 
     setModello("");
     setTarga("");
     setColore("");
     setLavorazioniSelezionate([]);
     setPriorita("1");
-  };
+  }, [modello, targa, colore, lavorazioniSelezionate, priorita, addAuto, autoList, esperienzaOperatoriPerTipo, lavorazioni, setLavorazioni]);
 
   const handleClickAuto = (autoId: string) => {
     setLavorazioni((prev) => prev.filter((l) => l.autoId !== autoId));
