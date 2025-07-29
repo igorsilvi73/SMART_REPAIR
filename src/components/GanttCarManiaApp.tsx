@@ -1,13 +1,17 @@
 // src/components/GanttCarManiaApp.tsx
 // GanttDataStore si trova nella stessa cartella components/
-import { useLavorazioni, Lavorazione, EsperienzaOperatoriPerTipo } from "./GanttDataStore"; 
+import {
+  useLavorazioni,
+  Lavorazione,
+  EsperienzaOperatoriPerTipo,
+} from "./GanttDataStore";
 // AutoDataStore si trova nella stessa cartella components/
-import { useAuto, Auto } from "./AutoDataStore"; 
-import React, { useState, useEffect, useCallback } from "react"; 
+import { useAuto, Auto } from "./AutoDataStore";
+import React, { useState, useEffect, useCallback } from "react";
 import "gantt-task-react/dist/index.css";
 import { Gantt, Task, ViewMode } from "gantt-task-react";
 // TooltipContent si trova nella stessa cartella components/
-import TooltipContent from "./TooltipContent"; 
+import TooltipContent from "./TooltipContent";
 // constants.ts si trova in src/, quindi il percorso è ../constants
 import {
   lavorazioniOrdinate,
@@ -15,8 +19,8 @@ import {
   coloriLavorazioni,
   espertiPerLavorazione,
   DEFAULT_ESPERIENZA_BASE,
-  getAllOperators 
-} from "../constants"; 
+  getAllOperators,
+} from "../constants";
 
 // Definisci una CustomTask per estendere l'interfaccia Task della libreria
 interface CustomTask extends Task {
@@ -73,9 +77,12 @@ function calculateWorkEndDate(startDate: Date, durationMs: number): Date {
   while (!isWorkHour(endDate)) {
     endDate.setHours(endDate.getHours() + 1);
     endDate.setMinutes(0, 0, 0);
-    if (endDate.getDay() === 0 || endDate.getDay() === 6) { 
-        endDate.setDate(endDate.getDate() + (endDate.getDay() === 0 ? 1 : (endDate.getDay() === 6 ? 2 : 0)));
-        endDate.setHours(8, 0, 0, 0);
+    if (endDate.getDay() === 0 || endDate.getDay() === 6) {
+      endDate.setDate(
+        endDate.getDate() +
+          (endDate.getDay() === 0 ? 1 : endDate.getDay() === 6 ? 2 : 0)
+      );
+      endDate.setHours(8, 0, 0, 0);
     }
   }
 
@@ -83,11 +90,17 @@ function calculateWorkEndDate(startDate: Date, durationMs: number): Date {
     const currentHour = endDate.getHours();
     const currentDay = endDate.getDay();
 
-    if (currentDay === 0 || currentDay === 6 || (currentHour >= 12 && currentHour < 14) || currentHour >= 18 || currentHour < 8) {
+    if (
+      currentDay === 0 ||
+      currentDay === 6 ||
+      (currentHour >= 12 && currentHour < 14) ||
+      currentHour >= 18 ||
+      currentHour < 8
+    ) {
       endDate.setHours(endDate.getHours() + 1);
       endDate.setMinutes(0, 0, 0);
     } else {
-      remainingMs -= (1000 * 60 * 60);
+      remainingMs -= 1000 * 60 * 60;
       endDate.setHours(endDate.getHours() + 1);
     }
   }
@@ -96,14 +109,20 @@ function calculateWorkEndDate(startDate: Date, durationMs: number): Date {
 
 // FUNZIONE CENTRALE DI SCHEDULING: Ripianifica tutte le lavorazioni non completate
 const recalculateFullSchedule = (
-  allLavorazioni: Lavorazione[], 
-  allAutoList: Auto[],         
+  allLavorazioni: Lavorazione[],
+  allAutoList: Auto[],
   esperienzaOperatori: EsperienzaOperatoriPerTipo,
-  trovaSlotLiberoFunc: (earliestStart: Date, taskDurationMs: number, operatore: string, existingOccupations: { start: Date; end: Date }[]) => Date 
+  trovaSlotLiberoFunc: (
+    earliestStart: Date,
+    taskDurationMs: number,
+    operatore: string,
+    existingOccupations: { start: Date; end: Date }[]
+  ) => Date
 ): Lavorazione[] => {
   const newScheduledLavorazioni: Lavorazione[] = [];
-  const currentOccupations: { [key: string]: { start: Date; end: Date }[] } = {};
-  const carLastEndTime: { [autoId: string]: Date } = {}; 
+  const currentOccupations: { [key: string]: { start: Date; end: Date }[] } =
+    {};
+  const carLastEndTime: { [autoId: string]: Date } = {};
 
   const completedLavorazioni = allLavorazioni.filter(
     (lav) => lav.stato === "completata"
@@ -120,10 +139,15 @@ const recalculateFullSchedule = (
     if (!currentOccupations[lav.operatore]) {
       currentOccupations[lav.operatore] = [];
     }
-    currentOccupations[lav.operatore].push({ start: lav.startTime!, end: estimatedEnd });
+    currentOccupations[lav.operatore].push({
+      start: lav.startTime!,
+      end: estimatedEnd,
+    });
   });
   for (const op in currentOccupations) {
-    currentOccupations[op].sort((a, b) => a.start.getTime() - b.start.getTime());
+    currentOccupations[op].sort(
+      (a, b) => a.start.getTime() - b.start.getTime()
+    );
   }
 
   interface TaskWithAutoPriority extends Lavorazione {
@@ -136,8 +160,8 @@ const recalculateFullSchedule = (
       const auto = allAutoList.find((a) => a.id === lav.autoId);
       return {
         ...lav,
-        carPriority: auto ? auto.priorita : "5", 
-        carAcceptanceDate: auto ? auto.dataAccettazione : new Date(0), 
+        carPriority: auto ? auto.priorita : "5",
+        carAcceptanceDate: auto ? auto.dataAccettazione : new Date(0),
       };
     }
   );
@@ -168,54 +192,94 @@ const recalculateFullSchedule = (
     }
 
     const candidateInfos: CandidateInfo[] = [];
-    
+
     let taskSearchStartTime: Date;
 
-    const auto = allAutoList.find(a => a.id === lavToReschedule.autoId); 
+    const auto = allAutoList.find((a) => a.id === lavToReschedule.autoId);
     let defaultBaseTime = auto?.dataAccettazione || new Date();
     while (!isWorkHour(defaultBaseTime)) {
-        defaultBaseTime.setHours(defaultBaseTime.getHours() + 1);
-        defaultBaseTime.setMinutes(0,0,0);
-        if (defaultBaseTime.getDay() === 0 || defaultBaseTime.getDay() === 6) { 
-            defaultBaseTime.setDate(defaultBaseTime.getDate() + (defaultBaseTime.getDay() === 0 ? 1 : (defaultBaseTime.getDay() === 6 ? 2 : 0)));
-            defaultBaseTime.setHours(8, 0, 0, 0);
-        }
+      defaultBaseTime.setHours(defaultBaseTime.getHours() + 1);
+      defaultBaseTime.setMinutes(0, 0, 0);
+      if (defaultBaseTime.getDay() === 0 || defaultBaseTime.getDay() === 6) {
+        defaultBaseTime.setDate(
+          defaultBaseTime.getDate() +
+            (defaultBaseTime.getDay() === 0
+              ? 1
+              : defaultBaseTime.getDay() === 6
+              ? 2
+              : 0)
+        );
+        defaultBaseTime.setHours(8, 0, 0, 0);
+      }
     }
     taskSearchStartTime = defaultBaseTime;
 
     if (lavToReschedule.prerequisiteLavorazioneId) {
-        const prerequisite = allLavorazioni.find(l => l.id === lavToReschedule.prerequisiteLavorazioneId);
-        if (prerequisite) {
-            if (prerequisite.stato === "completata" && prerequisite.completionTime) {
-                taskSearchStartTime = new Date(Math.max(taskSearchStartTime.getTime(), prerequisite.completionTime.getTime()));
-            } else if (prerequisite.startTime) {
-                const prereqEstimatedEnd = calculateWorkEndDate(prerequisite.startTime, prerequisite.estimatedMs);
-                taskSearchStartTime = new Date(Math.max(taskSearchStartTime.getTime(), prereqEstimatedEnd.getTime()));
-            }
+      const prerequisite = allLavorazioni.find(
+        (l) => l.id === lavToReschedule.prerequisiteLavorazioneId
+      );
+      if (prerequisite) {
+        if (
+          prerequisite.stato === "completata" &&
+          prerequisite.completionTime
+        ) {
+          taskSearchStartTime = new Date(
+            Math.max(
+              taskSearchStartTime.getTime(),
+              prerequisite.completionTime.getTime()
+            )
+          );
+        } else if (prerequisite.startTime) {
+          const prereqEstimatedEnd = calculateWorkEndDate(
+            prerequisite.startTime,
+            prerequisite.estimatedMs
+          );
+          taskSearchStartTime = new Date(
+            Math.max(
+              taskSearchStartTime.getTime(),
+              prereqEstimatedEnd.getTime()
+            )
+          );
         }
+      }
     }
 
-    if (carLastEndTime[lavToReschedule.autoId] && carLastEndTime[lavToReschedule.autoId].getTime() > taskSearchStartTime.getTime()) {
-        taskSearchStartTime = carLastEndTime[lavToReschedule.autoId];
+    if (
+      carLastEndTime[lavToReschedule.autoId] &&
+      carLastEndTime[lavToReschedule.autoId].getTime() >
+        taskSearchStartTime.getTime()
+    ) {
+      taskSearchStartTime = carLastEndTime[lavToReschedule.autoId];
     }
-    
+
     while (!isWorkHour(taskSearchStartTime)) {
-        taskSearchStartTime.setHours(taskSearchStartTime.getHours() + 1);
-        taskSearchStartTime.setMinutes(0,0,0);
-        if (taskSearchStartTime.getDay() === 0 || taskSearchStartTime.getDay() === 6) { 
-            taskSearchStartTime.setDate(taskSearchStartTime.getDate() + (taskSearchStartTime.getDay() === 0 ? 1 : (taskSearchStartTime.getDay() === 6 ? 2 : 0)));
-            taskSearchStartTime.setHours(8, 0, 0, 0);
-        }
+      taskSearchStartTime.setHours(taskSearchStartTime.getHours() + 1);
+      taskSearchStartTime.setMinutes(0, 0, 0);
+      if (
+        taskSearchStartTime.getDay() === 0 ||
+        taskSearchStartTime.getDay() === 6
+      ) {
+        taskSearchStartTime.setDate(
+          taskSearchStartTime.getDate() +
+            (taskSearchStartTime.getDay() === 0
+              ? 1
+              : taskSearchStartTime.getDay() === 6
+              ? 2
+              : 0)
+        );
+        taskSearchStartTime.setHours(8, 0, 0, 0);
+      }
     }
-
 
     for (const op of candidati) {
-      const experience = esperienzaOperatori[op]?.[lavToReschedule.tipo] ?? DEFAULT_ESPERIENZA_BASE;
-      const earliestStart = trovaSlotLiberoFunc( 
-        taskSearchStartTime, 
+      const experience =
+        esperienzaOperatori[op]?.[lavToReschedule.tipo] ??
+        DEFAULT_ESPERIENZA_BASE;
+      const earliestStart = trovaSlotLiberoFunc(
+        taskSearchStartTime,
         durataMs,
         op,
-        currentOccupations[op] || [] 
+        currentOccupations[op] || []
       );
       candidateInfos.push({
         name: op,
@@ -225,8 +289,12 @@ const recalculateFullSchedule = (
     }
 
     candidateInfos.sort((a, b) => {
-      if (a.earliestPossibleStart.getTime() !== b.earliestPossibleStart.getTime()) {
-        return a.earliestPossibleStart.getTime() - b.earliestPossibleStart.getTime();
+      if (
+        a.earliestPossibleStart.getTime() !== b.earliestPossibleStart.getTime()
+      ) {
+        return (
+          a.earliestPossibleStart.getTime() - b.earliestPossibleStart.getTime()
+        );
       }
       if (a.experience !== b.experience) {
         return b.experience - a.experience;
@@ -242,10 +310,15 @@ const recalculateFullSchedule = (
     if (!currentOccupations[operatoreAssegnato]) {
       currentOccupations[operatoreAssegnato] = [];
     }
-    currentOccupations[operatoreAssegnato].push({ start: inizioTask, end: endTask });
-    currentOccupations[operatoreAssegnato].sort((a, b) => a.start.getTime() - b.start.getTime());
+    currentOccupations[operatoreAssegnato].push({
+      start: inizioTask,
+      end: endTask,
+    });
+    currentOccupations[operatoreAssegnato].sort(
+      (a, b) => a.start.getTime() - b.start.getTime()
+    );
 
-    carLastEndTime[lavToReschedule.autoId] = endTask; 
+    carLastEndTime[lavToReschedule.autoId] = endTask;
 
     const updatedLav: Lavorazione = {
       ...lavToReschedule,
@@ -255,18 +328,24 @@ const recalculateFullSchedule = (
     newScheduledLavorazioni.push(updatedLav);
   });
 
-  return [...completedLavorazioni, ...fixedLavorazioni, ...newScheduledLavorazioni];
+  return [
+    ...completedLavorazioni,
+    ...fixedLavorazioni,
+    ...newScheduledLavorazioni,
+  ];
 };
 
-
 interface GanttCarManiaAppProps {
-  setRescheduleTrigger: React.Dispatch<React.SetStateAction<() => void>>; 
+  setRescheduleTrigger: React.Dispatch<React.SetStateAction<() => void>>;
 }
 
-const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigger }) => {
+const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({
+  setRescheduleTrigger,
+}) => {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const { lavorazioni, setLavorazioni, esperienzaOperatoriPerTipo } = useLavorazioni();
-  const { autoList, addAuto, getAutoById, setAutoList } = useAuto(); 
+  const { lavorazioni, setLavorazioni, esperienzaOperatoriPerTipo } =
+    useLavorazioni();
+  const { autoList, addAuto, getAutoById, setAutoList } = useAuto();
 
   const [modello, setModello] = useState("");
   const [priorita, setPriorita] = useState("1");
@@ -275,9 +354,9 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
   const [lavorazioniSelezionate, setLavorazioniSelezionate] = useState<
     string[]
   >([]);
-  const [occupazioneOperatori, setOccupazioneOperatori] = useState<
-    { [key: string]: { start: Date; end: Date }[] }
-  >({}); 
+  const [occupazioneOperatori, setOccupazioneOperatori] = useState<{
+    [key: string]: { start: Date; end: Date }[];
+  }>({});
 
   useEffect(() => {
     if (lavorazioni.length === 0 && autoList.length === 0) {
@@ -287,24 +366,35 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
 
     const tasksRicostruiti: CustomTask[] = [];
 
-    const currentRealOccupations: { [key: string]: { start: Date; end: Date }[] } = {};
-    lavorazioni.forEach(lav => {
-      if (lav.stato !== 'completata' && lav.startTime) {
-        const estimatedEnd = calculateWorkEndDate(lav.startTime, lav.estimatedMs);
+    const currentRealOccupations: {
+      [key: string]: { start: Date; end: Date }[];
+    } = {};
+    lavorazioni.forEach((lav) => {
+      if (lav.stato !== "completata" && lav.startTime) {
+        const estimatedEnd = calculateWorkEndDate(
+          lav.startTime,
+          lav.estimatedMs
+        );
         if (!currentRealOccupations[lav.operatore]) {
           currentRealOccupations[lav.operatore] = [];
         }
-        currentRealOccupations[lav.operatore].push({ start: lav.startTime, end: estimatedEnd });
+        currentRealOccupations[lav.operatore].push({
+          start: lav.startTime,
+          end: estimatedEnd,
+        });
       }
     });
     for (const op in currentRealOccupations) {
-      currentRealOccupations[op].sort((a, b) => a.start.getTime() - b.start.getTime());
+      currentRealOccupations[op].sort(
+        (a, b) => a.start.getTime() - b.start.getTime()
+      );
     }
     setOccupazioneOperatori(currentRealOccupations);
 
-
     autoList.forEach((auto: Auto) => {
-      const lavorazioniAuto = lavorazioni.filter((l: Lavorazione) => l.autoId === auto.id);
+      const lavorazioniAuto = lavorazioni.filter(
+        (l: Lavorazione) => l.autoId === auto.id
+      );
       if (lavorazioniAuto.length === 0) {
         return;
       }
@@ -312,6 +402,47 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
       const autoId = auto.id;
       const autoNome = auto.modello;
       const autoPriorita = auto.priorita;
+
+      // Inizio del blocco per il calcolo del progresso complessivo dell'auto
+      let totalEstimatedMsOfAllLavorazioni = 0; // Somma delle stime di TUTTE le lavorazioni dell'auto
+      let totalWorkDoneMs = 0; // Somma dei progressi effettivi (stimati per completate, elapsed per in corso/pausa)
+
+      lavorazioniAuto.forEach((l: Lavorazione) => {
+        totalEstimatedMsOfAllLavorazioni += l.estimatedMs; // Ogni lavorazione contribuisce al totale stimato
+
+        if (l.stato === "completata") {
+          // Se la lavorazione è completata, contribuisce con il 100% del suo tempo STIMATO
+          totalWorkDoneMs += l.estimatedMs;
+        } else if (l.stato === "in_corso" || l.stato === "pausa") {
+          // Se la lavorazione è in corso o in pausa, contribuisce con il tempo EFFETTIVO già lavorato
+          totalWorkDoneMs += l.elapsedMs;
+        }
+        // Le lavorazioni "attesa" contribuiscono a totalEstimatedMsOfAllLavorazioni ma non a totalWorkDoneMs
+      });
+
+      let autoProgress = 0;
+      if (totalEstimatedMsOfAllLavorazioni > 0) {
+        // Calcola la percentuale: lavoro fatto (in base a stime e elapsed) / totale stimato
+        autoProgress = parseFloat(
+          ((totalWorkDoneMs / totalEstimatedMsOfAllLavorazioni) * 100).toFixed(
+            1
+          )
+        );
+      } else if (lavorazioniAuto.length > 0) {
+        // Caso in cui non ci sono estimatedMs ma ci sono lavorazioni
+        // Se tutte le lavorazioni sono completate ma estimatedMs è 0 (scenario strano),
+        // potresti voler forzare il 100%.
+        const allCompleted = lavorazioniAuto.every(
+          (l) => l.stato === "completata"
+        );
+        if (allCompleted) {
+          autoProgress = 100;
+        }
+      }
+
+      // Assicurati che il progresso non superi il 100% e non sia negativo
+      autoProgress = Math.max(0, Math.min(100, autoProgress));
+      // Fine del blocco per il calcolo del progresso complessivo dell'auto
 
       const startProject = new Date(
         Math.min(
@@ -322,19 +453,24 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
       );
       const endProject = new Date(
         Math.max(
-          ...lavorazioniAuto.map(
-            (l: Lavorazione) => (l.completionTime ? l.completionTime.getTime() : calculateWorkEndDate(new Date(l.startTime || auto.dataAccettazione), l.estimatedMs).getTime())
+          ...lavorazioniAuto.map((l: Lavorazione) =>
+            l.completionTime
+              ? l.completionTime.getTime()
+              : calculateWorkEndDate(
+                  new Date(l.startTime || auto.dataAccettazione),
+                  l.estimatedMs
+                ).getTime()
           )
         )
       );
-      
+
       const padre: CustomTask = {
         id: autoId,
         name: `${autoNome} (priorità ${autoPriorita})`,
         type: "project",
         start: startProject,
         end: endProject,
-        progress: 0,
+        progress: autoProgress, // <--- ORA USA IL NUOVO CALCOLO
         hideChildren: false,
         styles: {
           progressColor: "#9acc69",
@@ -346,18 +482,24 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
       tasksRicostruiti.push(padre);
 
       lavorazioniAuto.forEach((l: Lavorazione) => {
-        const s = l.startTime || new Date(); 
-        const e = l.completionTime ? l.completionTime : calculateWorkEndDate(s, l.estimatedMs);
+        const s = l.startTime || new Date();
+        const e = l.completionTime
+          ? l.completionTime
+          : calculateWorkEndDate(s, l.estimatedMs);
 
         let progressPercentage: number;
         if (l.stato === "completata") {
           progressPercentage = 100;
         } else {
-          progressPercentage = l.estimatedMs > 0
-            ? Math.min(100, parseFloat(((l.elapsedMs / l.estimatedMs) * 100).toFixed(1)))
-            : 0;
+          progressPercentage =
+            l.estimatedMs > 0
+              ? Math.min(
+                  100,
+                  parseFloat(((l.elapsedMs / l.estimatedMs) * 100).toFixed(1))
+                )
+              : 0;
         }
-        
+
         const task: CustomTask = {
           id: l.id,
           name: `${l.tipo} – ${l.operatore}`,
@@ -365,7 +507,7 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
           project: l.autoId,
           start: s,
           end: e,
-          duration: l.estimatedMs / (1000 * 60 * 60), 
+          duration: l.estimatedMs / (1000 * 60 * 60),
           progress: progressPercentage,
           styles: {
             backgroundColor: coloriLavorazioni[l.tipo] || "#cccccc",
@@ -377,7 +519,9 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
           lavorazioneStato: l.stato,
           tempoLavoratoMs: l.elapsedMs,
           tempoStimatoMs: l.estimatedMs,
-          esperienzaOperatore: esperienzaOperatoriPerTipo[l.operatore]?.[l.tipo] ?? DEFAULT_ESPERIENZA_BASE,
+          esperienzaOperatore:
+            esperienzaOperatoriPerTipo[l.operatore]?.[l.tipo] ??
+            DEFAULT_ESPERIENZA_BASE,
         };
         tasksRicostruiti.push(task);
       });
@@ -386,8 +530,12 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
     const tuttiTask = [...tasksRicostruiti];
     const padri = tuttiTask.filter((t) => t.type === "project");
     padri.sort((a, b) => {
-      const pA = parseInt((a.name as string).match(/priorità (\d+)\)/)?.[1] || "5");
-      const pB = parseInt((b.name as string).match(/priorità (\d+)\)/)?.[1] || "5");
+      const pA = parseInt(
+        (a.name as string).match(/priorità (\d+)\)/)?.[1] || "5"
+      );
+      const pB = parseInt(
+        (b.name as string).match(/priorità (\d+)\)/)?.[1] || "5"
+      );
       return pA - pB;
     });
 
@@ -401,13 +549,11 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
     setTasks(ordinati);
   }, [lavorazioni, autoList, esperienzaOperatoriPerTipo]);
 
-
   const handleCheckboxChange = (lav: string) => {
     setLavorazioniSelezionate((prev) =>
       prev.includes(lav) ? prev.filter((l) => l !== lav) : [...prev, lav]
     );
   };
-
 
   const trovaSlotLibero = (
     earliestStart: Date,
@@ -416,9 +562,11 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
     existingOccupations: { start: Date; end: Date }[]
   ): Date => {
     let currentCheckTime = new Date(earliestStart);
-    let potentialEnd = calculateWorkEndDate(currentCheckTime, taskDurationMs); 
+    let potentialEnd = calculateWorkEndDate(currentCheckTime, taskDurationMs);
 
-    const sortedOccupations = [...existingOccupations].sort((a, b) => a.start.getTime() - b.start.getTime());
+    const sortedOccupations = [...existingOccupations].sort(
+      (a, b) => a.start.getTime() - b.start.getTime()
+    );
 
     while (true) {
       let isOverlap = false;
@@ -426,37 +574,39 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
         const occupied = sortedOccupations[i];
 
         if (
-          (currentCheckTime.getTime() < occupied.end.getTime() && potentialEnd.getTime() > occupied.start.getTime())
+          currentCheckTime.getTime() < occupied.end.getTime() &&
+          potentialEnd.getTime() > occupied.start.getTime()
         ) {
           isOverlap = true;
           currentCheckTime = new Date(occupied.end.getTime());
-          currentCheckTime.setMinutes(0,0,0);
-          potentialEnd = calculateWorkEndDate(currentCheckTime, taskDurationMs); 
-          i = -1; 
-          continue; 
+          currentCheckTime.setMinutes(0, 0, 0);
+          potentialEnd = calculateWorkEndDate(currentCheckTime, taskDurationMs);
+          i = -1;
+          continue;
         }
       }
 
       if (!isOverlap) {
-        while (!isWorkHour(currentCheckTime)) { 
+        while (!isWorkHour(currentCheckTime)) {
           currentCheckTime.setHours(currentCheckTime.getHours() + 1);
-          currentCheckTime.setMinutes(0,0,0);
-          potentialEnd = calculateWorkEndDate(currentCheckTime, taskDurationMs); 
+          currentCheckTime.setMinutes(0, 0, 0);
+          potentialEnd = calculateWorkEndDate(currentCheckTime, taskDurationMs);
         }
         return currentCheckTime;
       }
     }
   };
 
-
   const handleAddAuto = useCallback(() => {
     if (!modello || !targa || !colore || lavorazioniSelezionate.length === 0) {
-      alert("Compila tutti i campi auto (Modello, Targa, Colore) e seleziona almeno una lavorazione.");
+      alert(
+        "Compila tutti i campi auto (Modello, Targa, Colore) e seleziona almeno una lavorazione."
+      );
       return;
     }
 
     const newAutoId = `auto_${Date.now()}`;
-    
+
     const newAuto: Auto = {
       id: newAutoId,
       modello: modello,
@@ -468,61 +618,76 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
     };
     addAuto(newAuto);
 
-    setLavorazioni(prevLavorazioni => {
-        const newTasksForThisAuto: Lavorazione[] = [];
-        let lastPrerequisiteId: string | undefined;
+    setLavorazioni((prevLavorazioni) => {
+      const newTasksForThisAuto: Lavorazione[] = [];
+      let lastPrerequisiteId: string | undefined;
 
-        lavorazioniOrdinate.forEach((tipoLav: string) => {
-          if (lavorazioniSelezionate.includes(tipoLav)) {
-            const durataMs = durataLavorazioni[tipoLav] * 3600 * 1000;
-            const newTaskId = `task_${Date.now()}_${newTasksForThisAuto.length}`;
-            
-            const newTask: Lavorazione = {
-                id: newTaskId,
-                autoId: newAutoId,
-                autoNome: modello,
-                tipo: tipoLav,
-                operatore: "", 
-                startTime: null,
-                pauseTime: null,
-                elapsedMs: 0,
-                stato: "attesa",
-                estimatedMs: durataMs,
-                prerequisiteLavorazioneId: lastPrerequisiteId, 
-            };
+      lavorazioniOrdinate.forEach((tipoLav: string) => {
+        if (lavorazioniSelezionate.includes(tipoLav)) {
+          const durataMs = durataLavorazioni[tipoLav] * 3600 * 1000;
+          const newTaskId = `task_${Date.now()}_${newTasksForThisAuto.length}`;
 
-            newTasksForThisAuto.push(newTask);
-            
-            lastPrerequisiteId = newTaskId; 
-          }
-        });
+          const newTask: Lavorazione = {
+            id: newTaskId,
+            autoId: newAutoId,
+            autoNome: modello,
+            tipo: tipoLav,
+            operatore: "",
+            startTime: null,
+            pauseTime: null,
+            elapsedMs: 0,
+            stato: "attesa",
+            estimatedMs: durataMs,
+            prerequisiteLavorazioneId: lastPrerequisiteId,
+          };
 
-        const updatedScheduledLavorazioni = recalculateFullSchedule(
-          [...prevLavorazioni, ...newTasksForThisAuto], 
-          [...autoList, newAuto], 
-          esperienzaOperatoriPerTipo,
-          trovaSlotLibero 
-        );
+          newTasksForThisAuto.push(newTask);
 
-        return updatedScheduledLavorazioni;
-    }); 
+          lastPrerequisiteId = newTaskId;
+        }
+      });
+
+      const updatedScheduledLavorazioni = recalculateFullSchedule(
+        [...prevLavorazioni, ...newTasksForThisAuto],
+        [...autoList, newAuto],
+        esperienzaOperatoriPerTipo,
+        trovaSlotLibero
+      );
+
+      return updatedScheduledLavorazioni;
+    });
 
     setModello("");
     setTarga("");
     setColore("");
     setLavorazioniSelezionate([]);
     setPriorita("1");
-  }, [modello, targa, colore, lavorazioniSelezionate, priorita, addAuto, autoList, esperienzaOperatoriPerTipo, lavorazioni, setLavorazioni]);
+  }, [
+    modello,
+    targa,
+    colore,
+    lavorazioniSelezionate,
+    priorita,
+    addAuto,
+    autoList,
+    esperienzaOperatoriPerTipo,
+    lavorazioni,
+    setLavorazioni,
+  ]);
 
   const handleClickAuto = (autoId: string) => {
     setLavorazioni((prev) => prev.filter((l) => l.autoId !== autoId));
-    setAutoList(prev => prev.filter(auto => auto.id !== autoId)); 
+    setAutoList((prev) => prev.filter((auto) => auto.id !== autoId));
   };
 
   const handleBarClick = (task: Task) => {
     if (task.type === "project") {
       const auto = getAutoById(task.id);
-      const confirmDelete = window.confirm(`Vuoi eliminare l'auto ${auto?.modello || task.name} (Targa: ${auto?.targa || 'N/A'}) e tutte le sue lavorazioni?`);
+      const confirmDelete = window.confirm(
+        `Vuoi eliminare l'auto ${auto?.modello || task.name} (Targa: ${
+          auto?.targa || "N/A"
+        }) e tutte le sue lavorazioni?`
+      );
       if (confirmDelete) {
         handleClickAuto(task.id);
       }
@@ -532,33 +697,61 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
   return (
     <div style={{ padding: 30 }}>
       <h2>📅 Car Mania – Gantt Produzione</h2>
-      <div style={{ marginBottom: 20, border: '1px solid #ddd', padding: '15px', borderRadius: '8px', backgroundColor: '#f9f9f9' }}>
+      <div
+        style={{
+          marginBottom: 20,
+          border: "1px solid #ddd",
+          padding: "15px",
+          borderRadius: "8px",
+          backgroundColor: "#f9f9f9",
+        }}
+      >
         <h3>Aggiungi Nuova Auto per Lavorazione</h3>
         <input
           type="text"
           placeholder="Modello auto (es. Fiat Punto)"
           value={modello}
           onChange={(e) => setModello(e.target.value)}
-          style={{ marginRight: 10, padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+          style={{
+            marginRight: 10,
+            padding: "8px",
+            borderRadius: "4px",
+            border: "1px solid #ccc",
+          }}
         />
         <input
           type="text"
           placeholder="Targa auto (es. AB123CD)"
           value={targa}
           onChange={(e) => setTarga(e.target.value)}
-          style={{ marginRight: 10, padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+          style={{
+            marginRight: 10,
+            padding: "8px",
+            borderRadius: "4px",
+            border: "1px solid #ccc",
+          }}
         />
         <input
           type="text"
           placeholder="Colore auto (es. Rosso)"
           value={colore}
           onChange={(e) => setColore(e.target.value)}
-          style={{ marginRight: 10, padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+          style={{
+            marginRight: 10,
+            padding: "8px",
+            borderRadius: "4px",
+            border: "1px solid #ccc",
+          }}
         />
         <select
           value={priorita}
           onChange={(e) => setPriorita(e.target.value)}
-          style={{ marginRight: 10, padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+          style={{
+            marginRight: 10,
+            padding: "8px",
+            borderRadius: "4px",
+            border: "1px solid #ccc",
+          }}
         >
           <option value="1">Priorità 1 (alta)</option>
           <option value="2">Priorità 2</option>
@@ -569,12 +762,19 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
         <div style={{ marginBottom: 10, marginTop: 10 }}>
           <h4>Seleziona Lavorazioni:</h4>
           {lavorazioniOrdinate.map((lav: string) => (
-            <label key={lav} style={{ marginRight: 15, display: 'inline-block', marginBottom: '5px' }}>
+            <label
+              key={lav}
+              style={{
+                marginRight: 15,
+                display: "inline-block",
+                marginBottom: "5px",
+              }}
+            >
               <input
                 type="checkbox"
                 checked={lavorazioniSelezionate.includes(lav)}
                 onChange={() => handleCheckboxChange(lav)}
-                style={{ marginRight: '5px' }}
+                style={{ marginRight: "5px" }}
               />
               {" " + lav}
             </label>
@@ -582,7 +782,15 @@ const GanttCarManiaApp: React.FC<GanttCarManiaAppProps> = ({ setRescheduleTrigge
         </div>
         <button
           onClick={handleAddAuto}
-          style={{ backgroundColor: '#007bff', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontSize: '16px' }}
+          style={{
+            backgroundColor: "#007bff",
+            color: "white",
+            border: "none",
+            padding: "10px 20px",
+            borderRadius: "5px",
+            cursor: "pointer",
+            fontSize: "16px",
+          }}
         >
           ➕ Aggiungi auto
         </button>
