@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/SMART_REPAIR/static/css/main.0fcab471.css",
-    "main.js": "/SMART_REPAIR/static/js/main.a2b5f66d.js",
+    "main.js": "/SMART_REPAIR/static/js/main.72809701.js",
     "index.html": "/SMART_REPAIR/index.html",
     "main.0fcab471.css.map": "/SMART_REPAIR/static/css/main.0fcab471.css.map",
-    "main.a2b5f66d.js.map": "/SMART_REPAIR/static/js/main.a2b5f66d.js.map"
+    "main.72809701.js.map": "/SMART_REPAIR/static/js/main.72809701.js.map"
   },
   "entrypoints": [
     "static/css/main.0fcab471.css",
-    "static/js/main.a2b5f66d.js"
+    "static/js/main.72809701.js"
   ]
 }
